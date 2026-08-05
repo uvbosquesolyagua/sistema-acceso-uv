@@ -28,13 +28,11 @@ service = AutorizacionesService()
 # ============================================================
 # CORRECCIÓN FINAL: CREAR LA BASE DE DATOS AUTOMÁTICAMENTE
 # ============================================================
-# Esto se ejecuta una sola vez cuando el servidor arranca en Render
 def inicializar_base_datos():
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # Crear tabla de titulares (para pruebas)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS titulares (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +42,6 @@ def inicializar_base_datos():
             )
         ''')
         
-        # Crear tabla de autorizaciones
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS autorizaciones_acceso (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +68,6 @@ def inicializar_base_datos():
             )
         ''')
         
-        # Crear tabla de registros de acceso
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS registros_acceso (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,7 +82,6 @@ def inicializar_base_datos():
             )
         ''')
         
-        # Insertar un titular de prueba si no existe (para que puedas probar ya mismo)
         cursor.execute("SELECT count(*) FROM titulares")
         if cursor.fetchone()[0] == 0:
             cursor.execute('''
@@ -99,9 +94,8 @@ def inicializar_base_datos():
         print("✅ Base de datos inicializada correctamente en Render.")
         
     except Exception as e:
-        print(f"⚠️ Error al inicializar la base de datos (si ya existe, ignorar): {e}")
+        print(f"⚠️ Error al inicializar la base de datos: {e}")
 
-# Ejecutar la creación al arrancar
 inicializar_base_datos()
 # ============================================================
 
@@ -143,14 +137,56 @@ def index():
     </html>
     """
 
+
+# ============================================================
+# PORTAL DEL PORTERO - NUEVA PÁGINA CON BUSCADOR (OPCIÓN 2)
+# ============================================================
+@app.route('/portero')
+def portal_portero():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>🛡️ Portal del Portero</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #e9ecef; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+            .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 90%; max-width: 450px; }
+            h1 { color: #2196F3; }
+            p { color: #555; margin-bottom: 20px; }
+            .input-group { display: flex; flex-direction: column; gap: 15px; }
+            input[type="text"] { padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; }
+            input[type="text"]:focus { border-color: #2196F3; outline: none; }
+            .btn { padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; width: 100%; text-decoration: none; display: inline-block; box-sizing: border-box; }
+            .btn-validar { background: #2196F3; }
+            .btn-validar:hover { background: #1976D2; }
+            .btn-volver { background: #6c757d; margin-top: 15px; }
+            .btn-volver:hover { background: #5a6268; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🛡️ Portal del Portero</h1>
+            <p>Pega el enlace completo o el token del QR para validar el acceso.</p>
+            
+            <form action="/acceso" method="GET" class="input-group">
+                <input type="text" name="token" placeholder="Ej: https://.../acceso?token=xxxxx  o  xxxxx" required>
+                <button type="submit" class="btn btn-validar">🔍 Validar Acceso</button>
+            </form>
+            
+            <a href="/" class="btn btn-volver">🏠 Volver al inicio</a>
+        </div>
+    </body>
+    </html>
+    """
+
+
 # ============================================================
 # PORTAL DEL TITULAR (Generar QR)
 # ============================================================
-
 @app.route('/titular', methods=['GET', 'POST'])
 def portal_titular():
     if request.method == 'POST':
-        # Procesar formulario
         data = {
             'id_cta': request.form.get('id_cta'),
             'id_titular': request.form.get('id_titular'),
@@ -170,20 +206,16 @@ def portal_titular():
         
         try:
             resultado = service.crear_autorizacion(data, usuario)
-            
-            # Mostrar resultado con QR
             return render_template_string(RESULTADO_QR_HTML, **resultado)
-            
         except Exception as e:
             return f"❌ Error: {str(e)}"
     
-    # GET: Mostrar formulario
     return render_template_string(FORMULARIO_TITULAR_HTML)
 
-# ============================================================
-# PORTAL DEL PORTERO (Escaneo QR)
-# ============================================================
 
+# ============================================================
+# VALIDACIÓN DE ACCESO (El portero entra aquí desde el buscador)
+# ============================================================
 @app.route('/acceso')
 def acceso_portero():
     token = request.args.get('token')
@@ -191,7 +223,10 @@ def acceso_portero():
     if not token:
         return "❌ No se proporcionó token de acceso"
     
-    # Validar token
+    # Si el portero pegó el enlace completo, extraemos solo el token
+    if "token=" in token:
+        token = token.split("token=")[-1].split("&")[0]
+    
     autorizacion = service.validar_token(token)
     
     if not autorizacion:
@@ -199,12 +234,15 @@ def acceso_portero():
     
     return render_template_string(VALIDACION_QR_HTML, **autorizacion)
 
+
+# ============================================================
+# REGISTRO DE INGRESOS Y EGRESOS
+# ============================================================
 @app.route('/registrar_ingreso', methods=['POST'])
 def registrar_ingreso():
     data = request.get_json()
     id_autorizacion = data.get('id_autorizacion')
     portero = data.get('portero', 'Portero')
-    
     resultado = service.registrar_ingreso(id_autorizacion, portero)
     return jsonify(resultado)
 
@@ -213,19 +251,17 @@ def registrar_egreso():
     data = request.get_json()
     id_registro = data.get('id_registro')
     portero = data.get('portero', 'Portero')
-    
     resultado = service.registrar_egreso(id_registro, portero)
     return jsonify(resultado)
+
 
 # ============================================================
 # DASHBOARD DE ACCESOS
 # ============================================================
-
 @app.route('/dashboard_acceso')
 def dashboard_acceso():
     historial = service.obtener_historial(limite=100)
     
-    # Contar estadísticas
     total = len(historial)
     activos = sum(1 for r in historial if r.get('estado') == 'Activa')
     dentro = sum(1 for r in historial if r.get('estado_acceso') == 'Dentro')
@@ -236,10 +272,10 @@ def dashboard_acceso():
                                    dentro=dentro,
                                    historial=historial)
 
+
 # ============================================================
 # TEMPLATES HTML
 # ============================================================
-
 FORMULARIO_TITULAR_HTML = """
 <!DOCTYPE html>
 <html>
@@ -259,7 +295,6 @@ FORMULARIO_TITULAR_HTML = """
     <div class="container">
         <h1>🔑 Autorizar Acceso</h1>
         <p>Complete los datos del visitante para generar un QR de acceso.</p>
-        
         <form method="POST">
             <input type="hidden" name="id_cta" value="CTA-001">
             <input type="hidden" name="id_titular" value="1">
@@ -326,11 +361,9 @@ RESULTADO_QR_HTML = """
 <body>
     <div class="container">
         <h1>✅ QR Generado con Éxito</h1>
-        
         <div class="qr-img">
             <img src="{{ qr_base64 }}" width="250" height="250" alt="QR">
         </div>
-        
         <div class="info">
             <p><strong>👤 Visitante:</strong> {{ visitante_nombre }}</p>
             <p><strong>📄 DNI:</strong> {{ visitante_dni }}</p>
@@ -338,7 +371,6 @@ RESULTADO_QR_HTML = """
             <p><strong>🔑 Token:</strong> <span class="token">{{ token }}</span></p>
             <p><strong>🔗 Enlace:</strong> <span class="token">{{ url }}</span></p>
         </div>
-        
         <div>
             <button class="btn btn-blue" onclick="copiarEnlace()">📋 Copiar Enlace</button>
         </div>
@@ -346,7 +378,6 @@ RESULTADO_QR_HTML = """
         <a href="/titular" class="btn">🔙 Nueva Autorización</a>
         <a href="/" class="btn btn-blue">🏠 Inicio</a>
     </div>
-    
     <script>
         function copiarEnlace() {
             const enlace = "{{ url }}";
@@ -379,7 +410,6 @@ VALIDACION_QR_HTML = """
 <body>
     <div class="container">
         <h1>{% if estado_verificacion == 'Valida' %}✅ Acceso Autorizado{% elif estado_verificacion == 'Pendiente' %}⏳ Autorización Pendiente{% elif estado_verificacion == 'Vencida' %}❌ Autorización Vencida{% else %}⚠️ Estado Desconocido{% endif %}</h1>
-        
         <div class="info">
             <p><strong>👤 Visitante:</strong> {{ visitante_nombre }}</p>
             <p><strong>📄 DNI:</strong> {{ visitante_dni }}</p>
@@ -393,7 +423,6 @@ VALIDACION_QR_HTML = """
                 </span>
             </p>
         </div>
-        
         <div>
             {% if estado_verificacion == 'Valida' %}
                 <button class="btn" id="btnIngreso" onclick="registrarIngreso({{ id }})">✅ Registrar Ingreso</button>
@@ -406,19 +435,14 @@ VALIDACION_QR_HTML = """
         <a href="/portero" class="btn btn-blue">🔄 Escanear otro QR</a>
         <a href="/" class="btn btn-blue">🏠 Inicio</a>
     </div>
-    
     <script>
         let idAutorizacion = {{ id }};
         let idRegistro = null;
-        
         function registrarIngreso(id) {
             fetch('/registrar_ingreso', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    id_autorizacion: id,
-                    portero: 'Portero'
-                })
+                body: JSON.stringify({ id_autorizacion: id, portero: 'Portero' })
             })
             .then(response => response.json())
             .then(data => {
@@ -427,35 +451,23 @@ VALIDACION_QR_HTML = """
                     document.getElementById('btnIngreso').disabled = true;
                     document.getElementById('btnEgreso').disabled = false;
                     idRegistro = data.id_registro;
-                } else {
-                    alert('❌ Error: ' + data.mensaje);
-                }
+                } else { alert('❌ Error: ' + data.mensaje); }
             })
             .catch(error => alert('❌ Error de conexión: ' + error));
         }
-        
         function registrarEgreso() {
-            if (!idRegistro) {
-                alert('⚠️ Primero debe registrar el ingreso');
-                return;
-            }
-            
+            if (!idRegistro) { alert('⚠️ Primero debe registrar el ingreso'); return; }
             fetch('/registrar_egreso', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    id_registro: idRegistro,
-                    portero: 'Portero'
-                })
+                body: JSON.stringify({ id_registro: idRegistro, portero: 'Portero' })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     alert(data.mensaje);
                     document.getElementById('btnEgreso').disabled = true;
-                } else {
-                    alert('❌ Error: ' + data.mensaje);
-                }
+                } else { alert('❌ Error: ' + data.mensaje); }
             })
             .catch(error => alert('❌ Error de conexión: ' + error));
         }
@@ -508,46 +520,23 @@ DASHBOARD_HTML = """
 <body>
     <div class="container">
         <h1>📊 Dashboard de Accesos</h1>
-        
         <div>
-            <div class="card">
-                <div class="card-number">{{ total }}</div>
-                <div class="card-title">Total Autorizaciones</div>
-            </div>
-            <div class="card">
-                <div class="card-number">{{ activos }}</div>
-                <div class="card-title">Activas</div>
-            </div>
-            <div class="card">
-                <div class="card-number">{{ dentro }}</div>
-                <div class="card-title">Dentro del predio</div>
-            </div>
+            <div class="card"><div class="card-number">{{ total }}</div><div class="card-title">Total Autorizaciones</div></div>
+            <div class="card"><div class="card-number">{{ activos }}</div><div class="card-title">Activas</div></div>
+            <div class="card"><div class="card-number">{{ dentro }}</div><div class="card-title">Dentro del predio</div></div>
         </div>
-        
         <h2>📋 Últimos Accesos</h2>
         <table>
-            <thead>
-                <tr>
-                    <th>Visitante</th>
-                    <th>Propiedad</th>
-                    <th>Estado</th>
-                    <th>Ingreso</th>
-                    <th>Egreso</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Visitante</th><th>Propiedad</th><th>Estado</th><th>Ingreso</th><th>Egreso</th></tr></thead>
             <tbody>
                 {% for r in historial %}
                 <tr>
                     <td>{{ r.visitante_nombre }}</td>
                     <td>CTA-{{ r.codigo_cta }}</td>
                     <td>
-                        {% if r.estado_acceso == 'Dentro' %}
-                            <span style="color: #27ae60;">✅ Dentro</span>
-                        {% elif r.estado_acceso == 'Finalizado' %}
-                            <span style="color: #7f8c8d;">⬜ Finalizado</span>
-                        {% else %}
-                            <span style="color: #f39c12;">⏳ Pendiente</span>
-                        {% endif %}
+                        {% if r.estado_acceso == 'Dentro' %}<span style="color: #27ae60;">✅ Dentro</span>
+                        {% elif r.estado_acceso == 'Finalizado' %}<span style="color: #7f8c8d;">⬜ Finalizado</span>
+                        {% else %}<span style="color: #f39c12;">⏳ Pendiente</span>{% endif %}
                     </td>
                     <td>{{ r.fecha_ingreso or '-' }} {{ r.hora_ingreso or '' }}</td>
                     <td>{{ r.fecha_egreso or '-' }} {{ r.hora_egreso or '' }}</td>
@@ -563,28 +552,8 @@ DASHBOARD_HTML = """
 """
 
 # ============================================================
-# RUTA PARA SERVIR IMÁGENES QR
-# ============================================================
-
-@app.route('/static/qr/<filename>')
-def serve_qr(filename):
-    ruta = os.path.join(app.root_path, "static", "qr", filename)
-    
-    if os.path.exists(ruta):
-        return send_file(ruta, mimetype='image/png')
-    
-    return """
-    <div style='text-align:center; font-family:Arial; margin-top:50px;'>
-        <h1 style='color:#e74c3c;'>❌ Imagen no encontrada</h1>
-        <p>El archivo <strong>{}</strong> no existe.</p>
-        <a href='/' style='background:#3498db; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'>Volver al inicio</a>
-    </div>
-    """.format(filename), 404
-
-# ============================================================
 # INICIO DEL SERVIDOR
 # ============================================================
-
 if __name__ == '__main__':
     print("=" * 60)
     print("🏠 SISTEMA DE AUTORIZACIÓN DE ACCESO - QR")
@@ -594,7 +563,8 @@ if __name__ == '__main__':
     print("=" * 60)
     print("📌 Accesos:")
     print("   • /titular  → Generar QR")
-    print("   • /acceso?token=xxx  → Validar token")
+    print("   • /portero  → Portal para buscar y validar token")
+    print("   • /acceso?token=xxx  → Validar token directo")
     print("   • /dashboard_acceso → Estadísticas")
     print("=" * 60)
     
