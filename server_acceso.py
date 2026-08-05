@@ -10,15 +10,11 @@ import os
 import sys 
 
 # CORRECCIÓN IMPORTANTE PARA RENDER:
-# Esto le dice a Python que busque las carpetas 'modules' y 'database' 
-# en la raíz del proyecto en el servidor.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # ============================================================
-# PARCHE PARA AUDITORIA (Agregado para que el servidor arranque)
+# PARCHE PARA AUDITORIA
 # ============================================================
-# Cuando el archivo 'autorizaciones_service.py' intente importar 
-# 'AuditoriaService', lo encontrará aquí y no fallará.
 class AuditoriaService:
     def __init__(self):
         pass
@@ -28,6 +24,87 @@ class AuditoriaService:
 
 app = Flask(__name__)
 service = AutorizacionesService()
+
+# ============================================================
+# CORRECCIÓN FINAL: CREAR LA BASE DE DATOS AUTOMÁTICAMENTE
+# ============================================================
+# Esto se ejecuta una sola vez cuando el servidor arranca en Render
+def inicializar_base_datos():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Crear tabla de titulares (para pruebas)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS titulares (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_cta TEXT UNIQUE,
+                apellido_nombre TEXT,
+                email TEXT
+            )
+        ''')
+        
+        # Crear tabla de autorizaciones
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS autorizaciones_acceso (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_cta TEXT,
+                id_titular INTEGER,
+                visitante_nombre TEXT,
+                visitante_dni TEXT,
+                visitante_telefono TEXT,
+                visitante_vehiculo TEXT,
+                fecha_ingreso_autorizada TEXT,
+                hora_ingreso_autorizada TEXT,
+                fecha_egreso_autorizada TEXT,
+                hora_egreso_autorizada TEXT,
+                motivo TEXT,
+                relacion TEXT,
+                qr_code TEXT,
+                token TEXT UNIQUE,
+                estado TEXT,
+                fecha_creacion TEXT,
+                fecha_revocacion TEXT,
+                motivo_revocacion TEXT,
+                usuario_creacion TEXT,
+                FOREIGN KEY(id_titular) REFERENCES titulares(id)
+            )
+        ''')
+        
+        # Crear tabla de registros de acceso
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS registros_acceso (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_autorizacion INTEGER,
+                fecha_ingreso TEXT,
+                hora_ingreso TEXT,
+                portero_ingreso TEXT,
+                fecha_egreso TEXT,
+                hora_egreso TEXT,
+                portero_egreso TEXT,
+                FOREIGN KEY(id_autorizacion) REFERENCES autorizaciones_acceso(id)
+            )
+        ''')
+        
+        # Insertar un titular de prueba si no existe (para que puedas probar ya mismo)
+        cursor.execute("SELECT count(*) FROM titulares")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute('''
+                INSERT INTO titulares (id_cta, apellido_nombre, email) 
+                VALUES (?, ?, ?)
+            ''', ("CTA-001", "Titular de Prueba", "test@test.com"))
+            
+        conn.commit()
+        conn.close()
+        print("✅ Base de datos inicializada correctamente en Render.")
+        
+    except Exception as e:
+        print(f"⚠️ Error al inicializar la base de datos (si ya existe, ignorar): {e}")
+
+# Ejecutar la creación al arrancar
+inicializar_base_datos()
+# ============================================================
+
 
 # ============================================================
 # PÁGINA PRINCIPAL - REDIRECCIÓN
@@ -162,7 +239,7 @@ FORMULARIO_TITULAR_HTML = """
         <p>Complete los datos del visitante para generar un QR de acceso.</p>
         
         <form method="POST">
-            <input type="hidden" name="id_cta" value="1">
+            <input type="hidden" name="id_cta" value="CTA-001">
             <input type="hidden" name="id_titular" value="1">
             <input type="hidden" name="usuario_creacion" value="Titular">
             
@@ -228,7 +305,6 @@ RESULTADO_QR_HTML = """
     <div class="container">
         <h1>✅ QR Generado con Éxito</h1>
         
-        <!-- CORRECCIÓN: La imagen ahora usa el texto Base64, no un archivo -->
         <div class="qr-img">
             <img src="{{ qr_base64 }}" width="250" height="250" alt="QR">
         </div>
@@ -465,24 +541,20 @@ DASHBOARD_HTML = """
 """
 
 # ============================================================
-# RUTA PARA SERVIR IMÁGENES QR (CORREGIDA PARA RENDER)
+# RUTA PARA SERVIR IMÁGENES QR
 # ============================================================
 
 @app.route('/static/qr/<filename>')
 def serve_qr(filename):
-    # CORRECCIÓN: Ya no usa rutas de Windows (C:\...). 
-    # Ahora usa una ruta relativa que funciona en Render.
     ruta = os.path.join(app.root_path, "static", "qr", filename)
     
     if os.path.exists(ruta):
         return send_file(ruta, mimetype='image/png')
     
-    # Si no encuentra la imagen, muestra un error visual en lugar de crashear el servidor
     return """
     <div style='text-align:center; font-family:Arial; margin-top:50px;'>
         <h1 style='color:#e74c3c;'>❌ Imagen no encontrada</h1>
-        <p>El archivo <strong>{}</strong> no existe en la carpeta <strong>static/qr/</strong> del servidor.</p>
-        <p>Sube la imagen a GitHub o crea la carpeta en Render.</p>
+        <p>El archivo <strong>{}</strong> no existe.</p>
         <a href='/' style='background:#3498db; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'>Volver al inicio</a>
     </div>
     """.format(filename), 404
@@ -504,6 +576,4 @@ if __name__ == '__main__':
     print("   • /dashboard_acceso → Estadísticas")
     print("=" * 60)
     
-    # Render usa el puerto 10000 por defecto en sus planes gratuitos, 
-    # pero Gunicorn lo tomará de la variable de entorno, así que usamos 10000 o 5000.
     app.run(host='0.0.0.0', port=10000, debug=False)
