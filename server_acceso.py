@@ -343,46 +343,131 @@ FORMULARIO_TITULAR_HTML = """
 </html>
 """
 
-RESULTADO_QR_HTML = """
+VALIDACION_QR_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>✅ QR Generado</title>
+    <title>✅ Validación de QR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: Arial; background: #f0f2f5; padding: 20px; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 10px; text-align: center; }
-        .qr-img { border: 2px solid #ddd; border-radius: 10px; padding: 20px; margin: 20px auto; display: inline-block; }
-        .btn { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; margin: 5px; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 10px; }
+        .valid { color: #27ae60; }
+        .invalid { color: #e74c3c; }
+        .pending { color: #f39c12; }
+        .info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .input-group { margin-top: 15px; text-align: center; }
+        input[type="text"] { padding: 10px; border: 2px solid #ddd; border-radius: 5px; width: 80%; max-width: 200px; font-size: 16px; text-align: center; }
+        input[type="text"]:focus { border-color: #2196F3; outline: none; }
+        .btn { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-red { background: #e74c3c; }
         .btn-blue { background: #3498db; }
-        .info { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .token { font-family: monospace; background: #ecf0f1; padding: 10px; border-radius: 5px; word-break: break-all; }
+        .btn-verify { background: #2196F3; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>✅ QR Generado con Éxito</h1>
-        <div class="qr-img">
-            <img src="{{ qr_base64 }}" width="250" height="250" alt="QR">
-        </div>
+        <h1>{% if estado_verificacion == 'Valida' %}✅ Acceso Autorizado{% elif estado_verificacion == 'Pendiente' %}⏳ Autorización Pendiente{% elif estado_verificacion == 'Vencida' %}❌ Autorización Vencida{% else %}⚠️ Estado Desconocido{% endif %}</h1>
+        
         <div class="info">
             <p><strong>👤 Visitante:</strong> {{ visitante_nombre }}</p>
-            <p><strong>📄 DNI:</strong> {{ visitante_dni }}</p>
+            <p><strong>📄 DNI Registrado:</strong> {{ visitante_dni }}</p>
+            <p><strong>🏠 Propiedad:</strong> CTA-{{ codigo_cta }} - {{ titular_nombre }}</p>
             <p><strong>📅 Vigencia:</strong> {{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }} - {{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}</p>
-            <p><strong>🔑 Token:</strong> <span class="token">{{ token }}</span></p>
-            <p><strong>🔗 Enlace:</strong> <span class="token">{{ url }}</span></p>
+            <p><strong>📌 Motivo:</strong> {{ motivo or 'No especificado' }}</p>
+            <p><strong>📊 Estado:</strong> 
+                <span class="{% if estado_verificacion == 'Valida' %}valid{% elif estado_verificacion == 'Pendiente' %}pending{% else %}invalid{% endif %}">
+                    {{ mensaje }}
+                </span>
+            </p>
         </div>
-        <div>
-            <button class="btn btn-blue" onclick="copiarEnlace()">📋 Copiar Enlace</button>
+        
+        {% if estado_verificacion == 'Valida' %}
+        <div id="verificationSection">
+            <p style="font-weight: bold; color: #555;">🔒 Verificación de Seguridad</p>
+            <p>Pregunte al visitante su número de DNI para confirmar su identidad.</p>
+            <div class="input-group">
+                <input type="text" id="dniInput" placeholder="Ingrese DNI del visitante" autocomplete="off">
+                <br>
+                <button class="btn btn-verify" onclick="verificarYRegistrar({{ id }}, '{{ visitante_dni }}')">🔍 Verificar y Registrar Ingreso</button>
+            </div>
+            <div id="resultMessage" style="margin-top: 10px; font-weight: bold;"></div>
         </div>
-        <br>
-        <a href="/titular" class="btn">🔙 Nueva Autorización</a>
+        {% else %}
+            <button class="btn" disabled>⛔ Acceso Denegado</button>
+        {% endif %}
+        
+        <br><br>
+        <a href="/portero" class="btn btn-blue">🔄 Escanear otro QR</a>
         <a href="/" class="btn btn-blue">🏠 Inicio</a>
     </div>
+    
     <script>
-        function copiarEnlace() {
-            const enlace = "{{ url }}";
-            navigator.clipboard.writeText(enlace);
-            alert("✅ Enlace copiado al portapapeles");
+        let idRegistro = null;
+
+        function verificarYRegistrar(id, dniCorrecto) {
+            const dniIngresado = document.getElementById('dniInput').value.trim();
+            const mensajeDiv = document.getElementById('resultMessage');
+
+            if (dniIngresado === '') {
+                mensajeDiv.innerHTML = '<span style="color: #f39c12;">⚠️ Por favor, ingrese el DNI.</span>';
+                return;
+            }
+
+            if (dniIngresado !== dniCorrecto) {
+                mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ DNI INCORRECTO. No se puede registrar el ingreso.</span>';
+                document.getElementById('dniInput').value = '';
+                return;
+            }
+
+            // Si el DNI es correcto, procedemos a registrar el ingreso
+            mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ DNI Verificado. Registrando ingreso...</span>';
+            document.getElementById('btnIngreso').disabled = true;
+
+            fetch('/registrar_ingreso', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    id_autorizacion: id,
+                    portero: 'Portero'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ ' + data.mensaje + '</span>';
+                    document.getElementById('verificationSection').innerHTML = '<h2 style="color: #27ae60;">✅ Ingreso Registrado</h2><p>El visitante ha ingresado correctamente.</p><button class="btn btn-red" onclick="registrarEgreso(' + data.id_registro + ')">🚪 Registrar Egreso</button>';
+                    idRegistro = data.id_registro;
+                } else {
+                    mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ Error: ' + data.mensaje + '</span>';
+                }
+            })
+            .catch(error => {
+                mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ Error de conexión: ' + error + '</span>';
+            });
+        }
+
+        function registrarEgreso(id) {
+            if (!id) return;
+            fetch('/registrar_egreso', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    id_registro: id,
+                    portero: 'Portero'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.mensaje);
+                    document.getElementById('verificationSection').innerHTML = '<h2 style="color: #7f8c8d;">⬜ Egreso Registrado</h2>';
+                } else {
+                    alert('❌ Error: ' + data.mensaje);
+                }
+            })
+            .catch(error => alert('❌ Error de conexión: ' + error));
         }
     </script>
 </body>
