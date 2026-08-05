@@ -143,13 +143,8 @@ RESULTADO_QR_HTML = """
         </div>
         
         <div class="action-buttons">
-            <!-- Botón para compartir (Nativo del celular/PC) -->
             <button class="btn btn-share" onclick="compartirEnlace()">📤 Compartir</button>
-            
-            <!-- Botón directo para WhatsApp -->
             <button class="btn btn-wa" onclick="enviarWhatsApp()">💬 Enviar por WhatsApp</button>
-            
-            <!-- Botón para copiar enlace -->
             <button class="btn btn-blue" onclick="copiarEnlace()">📋 Copiar Enlace</button>
         </div>
         <br>
@@ -211,45 +206,53 @@ FORMULARIO_TITULAR_HTML = """
     <div class="container">
         <h1>🔑 Autorizar Acceso</h1>
         <p>Complete los datos del visitante para generar un QR de acceso.</p>
+        
+        <!-- Mostrar errores si existen -->
+        {% if error %}
+        <div style="background-color: #ffebee; color: #c62828; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ef9a9a;">
+            {{ error }}
+        </div>
+        {% endif %}
+        
         <form method="POST">
             <input type="hidden" name="id_cta" value="CTA-001">
             <input type="hidden" name="id_titular" value="1">
             <input type="hidden" name="usuario_creacion" value="Titular">
             
             <label>👤 Nombre del visitante *</label>
-            <input type="text" name="visitante_nombre" required>
+            <input type="text" name="visitante_nombre" value="{{ request.form.get('visitante_nombre', '') }}" required>
             
             <label>📄 DNI del visitante *</label>
-            <input type="text" name="visitante_dni" required>
+            <input type="text" name="visitante_dni" value="{{ request.form.get('visitante_dni', '') }}" required>
             
             <label>📱 Teléfono del visitante</label>
-            <input type="text" name="visitante_telefono">
+            <input type="text" name="visitante_telefono" value="{{ request.form.get('visitante_telefono', '') }}">
             
             <label>🚗 Vehículo (opcional)</label>
-            <input type="text" name="visitante_vehiculo">
+            <input type="text" name="visitante_vehiculo" value="{{ request.form.get('visitante_vehiculo', '') }}">
             
             <label>📅 Fecha de ingreso *</label>
-            <input type="date" name="fecha_ingreso" required>
+            <input type="date" name="fecha_ingreso" value="{{ request.form.get('fecha_ingreso', '') }}" required>
             
             <label>🕒 Hora de ingreso *</label>
-            <input type="time" name="hora_ingreso" required>
+            <input type="time" name="hora_ingreso" value="{{ request.form.get('hora_ingreso', '') }}" required>
             
             <label>📅 Fecha de egreso *</label>
-            <input type="date" name="fecha_egreso" required>
+            <input type="date" name="fecha_egreso" value="{{ request.form.get('fecha_egreso', '') }}" required>
             
             <label>🕒 Hora de egreso *</label>
-            <input type="time" name="hora_egreso" required>
+            <input type="time" name="hora_egreso" value="{{ request.form.get('hora_egreso', '') }}" required>
             
             <label>📌 Motivo</label>
-            <input type="text" name="motivo" placeholder="Visita familiar, mantenimiento, etc.">
+            <input type="text" name="motivo" value="{{ request.form.get('motivo', '') }}" placeholder="Visita familiar, mantenimiento, etc.">
             
             <label>🤝 Relación con el visitante</label>
             <select name="relacion">
-                <option value="Familiar">Familiar</option>
-                <option value="Amigo">Amigo</option>
-                <option value="Trabajador">Trabajador</option>
-                <option value="Contratista">Contratista</option>
-                <option value="Otro">Otro</option>
+                <option value="Familiar" {% if request.form.get('relacion') == 'Familiar' %}selected{% endif %}>Familiar</option>
+                <option value="Amigo" {% if request.form.get('relacion') == 'Amigo' %}selected{% endif %}>Amigo</option>
+                <option value="Trabajador" {% if request.form.get('relacion') == 'Trabajador' %}selected{% endif %}>Trabajador</option>
+                <option value="Contratista" {% if request.form.get('relacion') == 'Contratista' %}selected{% endif %}>Contratista</option>
+                <option value="Otro" {% if request.form.get('relacion') == 'Otro' %}selected{% endif %}>Otro</option>
             </select>
             
             <button type="submit" class="btn">✅ Generar QR</button>
@@ -337,7 +340,6 @@ VALIDACION_QR_HTML = """
                 return;
             }
 
-            // Si el DNI es correcto, procedemos a registrar el ingreso
             mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ DNI Verificado. Registrando ingreso...</span>';
             document.getElementById('btnIngreso').disabled = true;
 
@@ -548,10 +550,12 @@ def portal_portero():
 
 
 # ============================================================
-# PORTAL DEL TITULAR (Generar QR) - CON VALIDACIÓN DE FECHAS
+# PORTAL DEL TITULAR (Generar QR) - CON VALIDACIÓN Y PERSISTENCIA
 # ============================================================
 @app.route('/titular', methods=['GET', 'POST'])
 def portal_titular():
+    error = None  # Variable para guardar mensajes de error
+    
     if request.method == 'POST':
         # Procesar formulario
         data = {
@@ -588,23 +592,27 @@ def portal_titular():
             
             # 1. El ingreso no puede ser en el pasado
             if fecha_ingreso_dt < ahora:
-                return "❌ Error: La fecha y hora de ingreso no pueden ser anteriores al momento actual."
+                error = "❌ Error: La fecha y hora de ingreso no pueden ser anteriores al momento actual."
             
             # 2. El egreso no puede ser antes o igual que el ingreso
-            if fecha_egreso_dt <= fecha_ingreso_dt:
-                return "❌ Error: La fecha y hora de egreso deben ser posteriores a la fecha y hora de ingreso."
+            elif fecha_egreso_dt <= fecha_ingreso_dt:
+                error = "❌ Error: La fecha y hora de egreso deben ser posteriores a la fecha y hora de ingreso."
                 
         except Exception as e:
-            return f"❌ Error de formato en las fechas: {str(e)}"
+            error = f"❌ Error de formato en las fechas: {str(e)}"
         # ============================================================
         
-        try:
-            resultado = service.crear_autorizacion(data, usuario)
-            return render_template_string(RESULTADO_QR_HTML, **resultado)
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
+        # Si no hay errores de fechas, procedemos a crear la autorización
+        if error is None:
+            try:
+                resultado = service.crear_autorizacion(data, usuario)
+                return render_template_string(RESULTADO_QR_HTML, **resultado)
+            except Exception as e:
+                error = f"❌ Error del sistema: {str(e)}"
     
-    return render_template_string(FORMULARIO_TITULAR_HTML)
+    # Si hay un error o es un GET, volvemos a mostrar el formulario.
+    # Al pasar 'error' y 'request.form', los valores escritos se mantienen en el HTML.
+    return render_template_string(FORMULARIO_TITULAR_HTML, error=error)
 
 
 # ============================================================
