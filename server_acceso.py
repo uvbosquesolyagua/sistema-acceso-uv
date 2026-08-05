@@ -140,7 +140,7 @@ RESULTADO_QR_HTML = """
         </div>
         
         <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px;">
-            <h3 style="color: #555; font-size: 16px; margin-bottom: 15px;">📲 Compartir con los involucrados</h3>
+            <h3 style="color: #555; font-size: 16px; margin-bottom: 15px;">📲 Envío Automático</h3>
             
             <div class="action-buttons">
                 <button class="btn btn-wa-visitante" onclick="enviarVisitante()">📲 Enviar al Visitante</button>
@@ -159,27 +159,26 @@ RESULTADO_QR_HTML = """
         const nombre = "{{ visitante_nombre }}";
         const dni = "{{ visitante_dni }}";
         
-        const telVisitante = "{{ request.form.get('telefono_visitante', '') }}";
-        const telPortero = "{{ request.form.get('telefono_portero', '') }}";
+        // Teléfonos pasados directamente por el backend
+        const telVisitante = "{{ telefono_visitante }}";
+        const telPortero = "{{ telefono_portero }}";
         
         function enviarVisitante() {
-            let destino = telVisitante;
-            if(!destino) {
-                alert("⚠️ No ingresaste el teléfono del visitante en el formulario.");
+            if(!telVisitante) {
+                alert("⚠️ No cargaste el teléfono del visitante en el formulario.");
                 return;
             }
             const mensaje = `Hola ${nombre}! Aquí tienes tu enlace de acceso al condominio. Por favor, preséntaselo al portero cuando llegues: ${enlaceCompleto}`;
-            window.open(`https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`, '_blank');
+            window.open(`https://wa.me/${telVisitante}?text=${encodeURIComponent(mensaje)}`, '_blank');
         }
         
         function enviarPortero() {
-            let destino = telPortero;
-            if(!destino) {
-                alert("⚠️ No ingresaste el teléfono del portero en el formulario.");
+            if(!telPortero) {
+                alert("⚠️ No cargaste el teléfono del portero en el formulario.");
                 return;
             }
-            const mensaje = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Abre el enlace del sistema en tu celular, busca al visitante por DNI y registra el ingreso.\\n\\nEnlace del sistema: ${enlaceCompleto}`;
-            window.open(`https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`, '_blank');
+            const mensaje = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Abre el enlace del sistema en tu celular, busca al visitante por DNI y registra el ingreso.`;
+            window.open(`https://wa.me/${telPortero}?text=${encodeURIComponent(mensaje)}`, '_blank');
         }
     </script>
 </body>
@@ -225,7 +224,7 @@ FORMULARIO_TITULAR_HTML = """
             <input type="text" name="visitante_dni" value="{{ request.form.get('visitante_dni', '') }}" required>
             
             <label>📱 Teléfono del visitante</label>
-            <input type="text" name="visitante_telefono" value="{{ request.form.get('visitante_telefono', '') }}" placeholder="Ej: +5491112345678">
+            <input type="text" name="telefono_visitante" value="{{ request.form.get('telefono_visitante', '') }}" placeholder="Ej: +5491112345678">
             
             <label>🚗 Vehículo (opcional)</label>
             <input type="text" name="visitante_vehiculo" value="{{ request.form.get('visitante_vehiculo', '') }}">
@@ -244,9 +243,6 @@ FORMULARIO_TITULAR_HTML = """
             <input type="time" name="hora_egreso" value="{{ request.form.get('hora_egreso', '') }}" required>
             
             <div class="section-title">📲 Envío de Avisos</div>
-            <label>Teléfono del Visitante</label>
-            <input type="text" name="telefono_visitante" value="{{ request.form.get('telefono_visitante', '') }}" placeholder="Ej: +5491122334455">
-            
             <label>Teléfono del Portero</label>
             <input type="text" name="telefono_portero" value="{{ request.form.get('telefono_portero', '') }}" placeholder="Ej: +5491155667788">
             
@@ -585,7 +581,7 @@ def portal_portero():
 
 
 # ============================================================
-# PORTAL DEL TITULAR (Generar QR) - CORREGIDO (SIN VALIDACIÓN DE PASADO)
+# PORTAL DEL TITULAR (Generar QR) - CORREGIDO (CON ENVÍO DE TELÉFONOS)
 # ============================================================
 @app.route('/titular', methods=['GET', 'POST'])
 def portal_titular():
@@ -598,7 +594,7 @@ def portal_titular():
             'id_titular': request.form.get('id_titular'),
             'visitante_nombre': request.form.get('visitante_nombre'),
             'visitante_dni': request.form.get('visitante_dni'),
-            'visitante_telefono': request.form.get('visitante_telefono'),
+            'visitante_telefono': request.form.get('telefono_visitante'), # Guardamos el teléfono del visitante
             'visitante_vehiculo': request.form.get('visitante_vehiculo'),
             'fecha_ingreso': request.form.get('fecha_ingreso'),
             'hora_ingreso': request.form.get('hora_ingreso'),
@@ -614,15 +610,12 @@ def portal_titular():
         # VALIDACIÓN DE FECHAS CORREGIDA (Solo verifica coherencia)
         # ============================================================
         try:
-            # Juntar fecha y hora de ingreso para comparar
             fecha_ingreso_str = f"{data['fecha_ingreso']} {data['hora_ingreso']}"
             fecha_ingreso_dt = datetime.strptime(fecha_ingreso_str, "%Y-%m-%d %H:%M")
             
-            # Juntar fecha y hora de egreso para comparar
             fecha_egreso_str = f"{data['fecha_egreso']} {data['hora_egreso']}"
             fecha_egreso_dt = datetime.strptime(fecha_egreso_str, "%Y-%m-%d %H:%M")
             
-            # ÚNICA VALIDACIÓN: El egreso debe ser después del ingreso
             if fecha_egreso_dt <= fecha_ingreso_dt:
                 error = "❌ Error: La fecha y hora de egreso deben ser posteriores a la fecha y hora de ingreso."
                 
@@ -630,20 +623,25 @@ def portal_titular():
             error = f"❌ Error de formato en las fechas: {str(e)}"
         # ============================================================
         
-        # Si no hay errores de fechas, procedemos a crear la autorización
         if error is None:
             try:
                 resultado = service.crear_autorizacion(data, usuario)
-                return render_template_string(RESULTADO_QR_HTML, **resultado)
+                
+                # CORRECCIÓN: Pasamos los teléfonos a la pantalla de éxito
+                return render_template_string(
+                    RESULTADO_QR_HTML, 
+                    **resultado,
+                    telefono_visitante=request.form.get('telefono_visitante', ''),
+                    telefono_portero=request.form.get('telefono_portero', '')
+                )
             except Exception as e:
                 error = f"❌ Error del sistema: {str(e)}"
     
-    # Si hay un error o es un GET, volvemos a mostrar el formulario.
     return render_template_string(FORMULARIO_TITULAR_HTML, error=error)
 
 
 # ============================================================
-# VALIDACIÓN DE ACCESO (El portero entra aquí desde el buscador)
+# VALIDACIÓN DE ACCESO
 # ============================================================
 @app.route('/acceso')
 def acceso_portero():
@@ -652,7 +650,6 @@ def acceso_portero():
     if not token:
         return "❌ No se proporcionó token de acceso"
     
-    # Si el portero pegó el enlace completo, extraemos solo el token
     if "token=" in token:
         token = token.split("token=")[-1].split("&")[0]
     
