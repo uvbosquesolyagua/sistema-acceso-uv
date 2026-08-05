@@ -295,8 +295,8 @@ VALIDACION_QR_HTML = """
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>{% if estado_verificacion == 'Valida' %}✅ Acceso Autorizado{% elif estado_verificacion == 'Pendiente' %}⏳ Autorización Pendiente{% elif estado_verificacion == 'Vencida' %}❌ Autorización Vencida{% else %}⚠️ Estado Desconocido{% endif %}</h1>
+    <div class="container" id="mainContainer">
+        <h1 id="statusTitle">⏳ Verificando...</h1>
         
         <div class="info">
             <p><strong>👤 Visitante:</strong> {{ visitante_nombre }}</p>
@@ -304,34 +304,61 @@ VALIDACION_QR_HTML = """
             <p><strong>🏠 Propiedad:</strong> CTA-{{ codigo_cta }} - {{ titular_nombre }}</p>
             <p><strong>📅 Vigencia:</strong> {{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }} - {{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}</p>
             <p><strong>📌 Motivo:</strong> {{ motivo or 'No especificado' }}</p>
-            <p><strong>📊 Estado:</strong> 
-                <span class="{% if estado_verificacion == 'Valida' %}valid{% elif estado_verificacion == 'Pendiente' %}pending{% else %}invalid{% endif %}">
-                    {{ mensaje }}
-                </span>
-            </p>
+            <p><strong>📊 Estado del sistema:</strong> <span id="statusMessage" style="font-weight: bold; color: #f39c12;">⏳ Validando horario local...</span></p>
         </div>
         
-        {% if estado_verificacion == 'Valida' %}
-        <div id="verificationSection">
+        <div id="verificationSection" style="display: none;">
             <p style="font-weight: bold; color: #555;">🔒 Verificación de Seguridad</p>
             <p>Pregunte al visitante su número de DNI para confirmar su identidad.</p>
             <div class="input-group">
                 <input type="text" id="dniInput" placeholder="Ingrese DNI del visitante" autocomplete="off">
                 <br>
-                <button class="btn btn-verify" onclick="verificarYRegistrar({{ id }}, '{{ visitante_dni }}')">🔍 Verificar y Registrar Ingreso</button>
+                <button class="btn btn-verify" id="btnVerify" onclick="verificarYRegistrar({{ id }}, '{{ visitante_dni }}')">🔍 Verificar y Registrar Ingreso</button>
             </div>
             <div id="resultMessage" style="margin-top: 10px; font-weight: bold;"></div>
         </div>
-        {% else %}
-            <button class="btn" disabled>⛔ Acceso Denegado</button>
-        {% endif %}
         
+        <div id="deniedSection" style="display: none;">
+            <button class="btn" disabled>⛔ Acceso Denegado</button>
+        </div>
+
         <br><br>
         <a href="/portero" class="btn btn-blue">🔄 Escanear otro QR</a>
         <a href="/" class="btn btn-blue">🏠 Inicio</a>
     </div>
     
     <script>
+        // Datos de la autorización pasados por el servidor
+        const fechaIngresoStr = "{{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }}";
+        const fechaEgresoStr = "{{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}";
+
+        // 1. Convertir las fechas del servidor a objeto Date (el navegador usa la hora LOCAL del celular)
+        // Agregamos 'T' para que JavaScript lo entienda como fecha/hora local
+        const fechaIngreso = new Date(fechaIngresoStr.replace(' ', 'T'));
+        const fechaEgreso = new Date(fechaEgresoStr.replace(' ', 'T'));
+        const ahora = new Date(); // Hora actual del celular del portero
+
+        const statusMessage = document.getElementById('statusMessage');
+        const statusTitle = document.getElementById('statusTitle');
+        const verificationSection = document.getElementById('verificationSection');
+        const deniedSection = document.getElementById('deniedSection');
+
+        // 2. Comparar usando la hora del celular (Infalible)
+        if (ahora < fechaIngreso) {
+            statusTitle.innerHTML = '⏳ Autorización Pendiente';
+            statusMessage.innerHTML = '<span style="color: #f39c12;">⏳ La autorización aún no está vigente (según tu celular).</span>';
+            deniedSection.style.display = 'block';
+        } else if (ahora > fechaEgreso) {
+            statusTitle.innerHTML = '❌ Autorización Vencida';
+            statusMessage.innerHTML = '<span style="color: #e74c3c;">⚠️ La autorización ha vencido (según tu celular).</span>';
+            deniedSection.style.display = 'block';
+        } else {
+            statusTitle.innerHTML = '✅ Acceso Autorizado';
+            statusMessage.innerHTML = '<span style="color: #27ae60;">✅ Autorización válida en este momento.</span>';
+            verificationSection.style.display = 'block';
+        }
+
+        // 3. Lógica para verificar el DNI y registrar el ingreso
         let idRegistro = null;
 
         function verificarYRegistrar(id, dniCorrecto) {
@@ -350,7 +377,7 @@ VALIDACION_QR_HTML = """
             }
 
             mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ DNI Verificado. Registrando ingreso...</span>';
-            document.getElementById('btnIngreso').disabled = true;
+            document.getElementById('btnVerify').disabled = true;
 
             fetch('/registrar_ingreso', {
                 method: 'POST',
