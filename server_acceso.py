@@ -119,8 +119,6 @@ RESULTADO_QR_HTML = """
         .btn-wa { background: #25D366; }
         .btn-share { background: #9b59b6; }
         .info { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        
-        /* CORRECCIÓN PARA QUE EL TEXTO LARGO NO SE CORTE EN EL CELULAR */
         .token-box { 
             font-family: monospace; 
             background: #ecf0f1; 
@@ -561,7 +559,7 @@ def portal_portero():
 
 
 # ============================================================
-# PORTAL DEL TITULAR (Generar QR) - CON VALIDACIÓN Y PERSISTENCIA
+# PORTAL DEL TITULAR (Generar QR) - CORREGIDO (SIN VALIDACIÓN DE PASADO)
 # ============================================================
 @app.route('/titular', methods=['GET', 'POST'])
 def portal_titular():
@@ -587,12 +585,9 @@ def portal_titular():
         usuario = {'nombre': request.form.get('usuario_creacion', 'Titular')}
         
         # ============================================================
-        # VALIDACIÓN DE FECHAS (Evita fechas atrasadas o incongruentes)
+        # VALIDACIÓN DE FECHAS CORREGIDA (Solo verifica coherencia)
         # ============================================================
         try:
-            # Obtener la fecha y hora actual del sistema
-            ahora = datetime.now()
-            
             # Juntar fecha y hora de ingreso para comparar
             fecha_ingreso_str = f"{data['fecha_ingreso']} {data['hora_ingreso']}"
             fecha_ingreso_dt = datetime.strptime(fecha_ingreso_str, "%Y-%m-%d %H:%M")
@@ -601,12 +596,8 @@ def portal_titular():
             fecha_egreso_str = f"{data['fecha_egreso']} {data['hora_egreso']}"
             fecha_egreso_dt = datetime.strptime(fecha_egreso_str, "%Y-%m-%d %H:%M")
             
-            # 1. El ingreso no puede ser en el pasado
-            if fecha_ingreso_dt < ahora:
-                error = "❌ Error: La fecha y hora de ingreso no pueden ser anteriores al momento actual."
-            
-            # 2. El egreso no puede ser antes o igual que el ingreso
-            elif fecha_egreso_dt <= fecha_ingreso_dt:
+            # ÚNICA VALIDACIÓN: El egreso debe ser después del ingreso
+            if fecha_egreso_dt <= fecha_ingreso_dt:
                 error = "❌ Error: La fecha y hora de egreso deben ser posteriores a la fecha y hora de ingreso."
                 
         except Exception as e:
@@ -622,7 +613,6 @@ def portal_titular():
                 error = f"❌ Error del sistema: {str(e)}"
     
     # Si hay un error o es un GET, volvemos a mostrar el formulario.
-    # Al pasar 'error' y 'request.form', los valores escritos se mantienen en el HTML.
     return render_template_string(FORMULARIO_TITULAR_HTML, error=error)
 
 
