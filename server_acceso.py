@@ -101,7 +101,7 @@ inicializar_base_datos()
 
 
 # ============================================================
-# TEMPLATES HTML DEFINIDOS PRIMERO (¡EL ORDEN CORRECTO!)
+# TEMPLATES HTML DEFINIDOS PRIMERO
 # ============================================================
 
 RESULTADO_QR_HTML = """
@@ -114,25 +114,14 @@ RESULTADO_QR_HTML = """
         body { font-family: Arial; background: #f0f2f5; padding: 20px; }
         .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 10px; text-align: center; }
         .qr-img { border: 2px solid #ddd; border-radius: 10px; padding: 20px; margin: 20px auto; display: inline-block; }
-        .btn { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; margin: 5px; font-size: 15px; }
+        .btn { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; margin: 5px; font-size: 15px; font-weight: bold; color: white; width: 100%; }
+        .btn-wa-visitante { background: #25D366; }
+        .btn-wa-portero { background: #FFA500; }
         .btn-blue { background: #3498db; }
-        .btn-wa { background: #25D366; }
-        .btn-share { background: #9b59b6; }
+        .btn-volver { background: #27ae60; }
         .info { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .token-box { 
-            font-family: monospace; 
-            background: #ecf0f1; 
-            padding: 10px; 
-            border-radius: 5px; 
-            word-break: break-all; 
-            white-space: pre-wrap; 
-            font-size: 13px;
-            display: block;
-        }
-        .action-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-        @media (min-width: 600px) {
-            .action-buttons { flex-direction: row; justify-content: center; flex-wrap: wrap; }
-        }
+        .token-box { font-family: monospace; background: #ecf0f1; padding: 10px; border-radius: 5px; word-break: break-all; font-size: 13px; display: block; }
+        .action-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -148,48 +137,49 @@ RESULTADO_QR_HTML = """
             <p><strong>📄 DNI:</strong> {{ visitante_dni }}</p>
             <p><strong>📅 Vigencia:</strong> {{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }} - {{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}</p>
             <p><strong>🔑 Token:</strong> <span class="token-box">{{ token }}</span></p>
-            <p><strong>🔗 Enlace:</strong> <span class="token-box">{{ url }}</span></p>
         </div>
         
-        <div class="action-buttons">
-            <button class="btn btn-share" onclick="compartirEnlace()">📤 Compartir</button>
-            <button class="btn btn-wa" onclick="enviarWhatsApp()">💬 Enviar por WhatsApp</button>
-            <button class="btn btn-blue" onclick="copiarEnlace()">📋 Copiar Enlace</button>
+        <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px;">
+            <h3 style="color: #555; font-size: 16px; margin-bottom: 15px;">📲 Compartir con los involucrados</h3>
+            
+            <div class="action-buttons">
+                <button class="btn btn-wa-visitante" onclick="enviarVisitante()">📲 Enviar al Visitante</button>
+                <button class="btn btn-wa-portero" onclick="enviarPortero()">🚨 Enviar al Portero</button>
+            </div>
         </div>
+        
         <br>
-        <a href="/titular" class="btn">🔙 Nueva Autorización</a>
+        <a href="/titular" class="btn btn-volver">🔙 Nueva Autorización</a>
         <a href="/" class="btn btn-blue">🏠 Inicio</a>
     </div>
     
     <script>
-        const enlace = "{{ url }}";
-        const visitante = "{{ visitante_nombre }}";
+        const enlaceCompleto = "{{ url }}";
+        const token = "{{ token }}";
+        const nombre = "{{ visitante_nombre }}";
+        const dni = "{{ visitante_dni }}";
         
-        function copiarEnlace() {
-            navigator.clipboard.writeText(enlace);
-            alert("✅ Enlace copiado al portapapeles");
-        }
+        const telVisitante = "{{ request.form.get('telefono_visitante', '') }}";
+        const telPortero = "{{ request.form.get('telefono_portero', '') }}";
         
-        function compartirEnlace() {
-            if (navigator.share) {
-                navigator.share({
-                    title: 'Acceso autorizado',
-                    text: 'Aquí tienes el enlace de acceso para tu visita:',
-                    url: enlace
-                }).then(() => {
-                    console.log('Compartido exitosamente');
-                }).catch((error) => {
-                    console.log('Error al compartir', error);
-                });
-            } else {
-                copiarEnlace();
+        function enviarVisitante() {
+            let destino = telVisitante;
+            if(!destino) {
+                alert("⚠️ No ingresaste el teléfono del visitante en el formulario.");
+                return;
             }
+            const mensaje = `Hola ${nombre}! Aquí tienes tu enlace de acceso al condominio. Por favor, preséntaselo al portero cuando llegues: ${enlaceCompleto}`;
+            window.open(`https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`, '_blank');
         }
         
-        function enviarWhatsApp() {
-            const mensaje = `Hola! Aquí tienes tu enlace de acceso para ingresar al condominio. Por favor, muéstraselo al portero cuando llegues: ${enlace}`;
-            const mensajeCodificado = encodeURIComponent(mensaje);
-            window.open(`https://wa.me/?text=${mensajeCodificado}`, '_blank');
+        function enviarPortero() {
+            let destino = telPortero;
+            if(!destino) {
+                alert("⚠️ No ingresaste el teléfono del portero en el formulario.");
+                return;
+            }
+            const mensaje = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Abre el enlace del sistema en tu celular, busca al visitante por DNI y registra el ingreso.\\n\\nEnlace del sistema: ${enlaceCompleto}`;
+            window.open(`https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`, '_blank');
         }
     </script>
 </body>
@@ -209,6 +199,7 @@ FORMULARIO_TITULAR_HTML = """
         .btn { background: #27ae60; color: white; padding: 12px; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 20px; }
         .btn:hover { background: #2ecc71; }
         h1 { color: #2c3e50; }
+        .section-title { margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; color: #555; font-size: 14px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -216,7 +207,6 @@ FORMULARIO_TITULAR_HTML = """
         <h1>🔑 Autorizar Acceso</h1>
         <p>Complete los datos del visitante para generar un QR de acceso.</p>
         
-        <!-- Mostrar errores si existen -->
         {% if error %}
         <div style="background-color: #ffebee; color: #c62828; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ef9a9a;">
             {{ error }}
@@ -235,22 +225,30 @@ FORMULARIO_TITULAR_HTML = """
             <input type="text" name="visitante_dni" value="{{ request.form.get('visitante_dni', '') }}" required>
             
             <label>📱 Teléfono del visitante</label>
-            <input type="text" name="visitante_telefono" value="{{ request.form.get('visitante_telefono', '') }}">
+            <input type="text" name="visitante_telefono" value="{{ request.form.get('visitante_telefono', '') }}" placeholder="Ej: +5491112345678">
             
             <label>🚗 Vehículo (opcional)</label>
             <input type="text" name="visitante_vehiculo" value="{{ request.form.get('visitante_vehiculo', '') }}">
             
-            <label>📅 Fecha de ingreso *</label>
+            <div class="section-title">📅 Fechas y Horarios</div>
+            <label>Fecha de ingreso *</label>
             <input type="date" name="fecha_ingreso" value="{{ request.form.get('fecha_ingreso', '') }}" required>
             
-            <label>🕒 Hora de ingreso *</label>
+            <label>Hora de ingreso *</label>
             <input type="time" name="hora_ingreso" value="{{ request.form.get('hora_ingreso', '') }}" required>
             
-            <label>📅 Fecha de egreso *</label>
+            <label>Fecha de egreso *</label>
             <input type="date" name="fecha_egreso" value="{{ request.form.get('fecha_egreso', '') }}" required>
             
-            <label>🕒 Hora de egreso *</label>
+            <label>Hora de egreso *</label>
             <input type="time" name="hora_egreso" value="{{ request.form.get('hora_egreso', '') }}" required>
+            
+            <div class="section-title">📲 Envío de Avisos</div>
+            <label>Teléfono del Visitante</label>
+            <input type="text" name="telefono_visitante" value="{{ request.form.get('telefono_visitante', '') }}" placeholder="Ej: +5491122334455">
+            
+            <label>Teléfono del Portero</label>
+            <input type="text" name="telefono_portero" value="{{ request.form.get('telefono_portero', '') }}" placeholder="Ej: +5491155667788">
             
             <label>📌 Motivo</label>
             <input type="text" name="motivo" value="{{ request.form.get('motivo', '') }}" placeholder="Visita familiar, mantenimiento, etc.">
@@ -328,22 +326,18 @@ VALIDACION_QR_HTML = """
     </div>
     
     <script>
-        // Datos de la autorización pasados por el servidor
         const fechaIngresoStr = "{{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }}";
         const fechaEgresoStr = "{{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}";
 
-        // 1. Convertir las fechas del servidor a objeto Date (el navegador usa la hora LOCAL del celular)
-        // Agregamos 'T' para que JavaScript lo entienda como fecha/hora local
         const fechaIngreso = new Date(fechaIngresoStr.replace(' ', 'T'));
         const fechaEgreso = new Date(fechaEgresoStr.replace(' ', 'T'));
-        const ahora = new Date(); // Hora actual del celular del portero
+        const ahora = new Date();
 
         const statusMessage = document.getElementById('statusMessage');
         const statusTitle = document.getElementById('statusTitle');
         const verificationSection = document.getElementById('verificationSection');
         const deniedSection = document.getElementById('deniedSection');
 
-        // 2. Comparar usando la hora del celular (Infalible)
         if (ahora < fechaIngreso) {
             statusTitle.innerHTML = '⏳ Autorización Pendiente';
             statusMessage.innerHTML = '<span style="color: #f39c12;">⏳ La autorización aún no está vigente (según tu celular).</span>';
@@ -358,7 +352,6 @@ VALIDACION_QR_HTML = """
             verificationSection.style.display = 'block';
         }
 
-        // 3. Lógica para verificar el DNI y registrar el ingreso
         let idRegistro = null;
 
         function verificarYRegistrar(id, dniCorrecto) {
@@ -559,22 +552,28 @@ def portal_portero():
             h1 { color: #2196F3; }
             p { color: #555; margin-bottom: 20px; }
             .input-group { display: flex; flex-direction: column; gap: 15px; }
-            input[type="text"] { padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; }
-            input[type="text"]:focus { border-color: #2196F3; outline: none; }
+            textarea { 
+                padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; resize: none; height: 100px;
+                font-family: monospace;
+            }
+            textarea:focus { border-color: #2196F3; outline: none; }
             .btn { padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; width: 100%; text-decoration: none; display: inline-block; box-sizing: border-box; }
             .btn-validar { background: #2196F3; }
             .btn-validar:hover { background: #1976D2; }
             .btn-volver { background: #6c757d; margin-top: 15px; }
             .btn-volver:hover { background: #5a6268; }
+            .instruccion { font-size: 13px; color: #6c757d; margin: 10px 0; text-align: left; }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>🛡️ Portal del Portero</h1>
-            <p>Pega el enlace completo o el token del QR para validar el acceso.</p>
+            <p>Escriba aquí el TOKEN o el ENLACE que el visitante le dicta en voz alta.</p>
+            
+            <div class="instruccion">💡 El visitante debe leerle el enlace que tiene en su celular.</div>
             
             <form action="/acceso" method="GET" class="input-group">
-                <input type="text" name="token" placeholder="Ej: https://.../acceso?token=xxxxx  o  xxxxx" required>
+                <textarea name="token" placeholder="Ej: xxxxxx   o   https://sistema-acceso-uv-1.onrender.com/acceso?token=xxxxxx" required></textarea>
                 <button type="submit" class="btn btn-validar">🔍 Validar Acceso</button>
             </form>
             
