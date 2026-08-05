@@ -228,8 +228,9 @@ RESULTADO_QR_HTML = """
     <div class="container">
         <h1>✅ QR Generado con Éxito</h1>
         
+        <!-- CORRECCIÓN: La imagen ahora usa el texto Base64, no un archivo -->
         <div class="qr-img">
-            <img src="/static/qr/qr_{{ token }}.png" width="250" height="250" alt="QR">
+            <img src="{{ qr_base64 }}" width="250" height="250" alt="QR">
         </div>
         
         <div class="info">
@@ -241,7 +242,6 @@ RESULTADO_QR_HTML = """
         </div>
         
         <div>
-            <a href="/static/qr/qr_{{ token }}.png" download class="btn">📥 Descargar QR</a>
             <button class="btn btn-blue" onclick="copiarEnlace()">📋 Copiar Enlace</button>
         </div>
         <br>
