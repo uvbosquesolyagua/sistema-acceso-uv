@@ -107,18 +107,40 @@ inicializar_base_datos()
 
 
 # ============================================================
-# PÁGINA PRINCIPAL - REDIRECCIÓN
+# PÁGINA PRINCIPAL - DISEÑO ESTILO APP PROFESIONAL
 # ============================================================
-
 @app.route('/')
 def index():
     return """
-    <h1>🏠 Sistema de Autorización de Acceso</h1>
-    <p>Bienvenido al sistema de gestión de accesos.</p>
-    <ul>
-        <li><a href="/titular">🔑 Portal del Titular (generar QR)</a></li>
-        <li><a href="/portero">🛡️ Portal del Portero (escanear QR)</a></li>
-    </ul>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sistema de Acceso</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
+            .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; width: 90%; max-width: 400px; }
+            h1 { color: #333; margin-bottom: 20px; font-size: 24px; }
+            .menu { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
+            .btn { display: block; padding: 15px; text-decoration: none; border-radius: 10px; font-weight: bold; transition: transform 0.2s; }
+            .btn:hover { transform: scale(1.02); }
+            .btn-titular { background: #4CAF50; color: white; }
+            .btn-portero { background: #2196F3; color: white; }
+            .footer { margin-top: 20px; font-size: 12px; color: #888; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>🏠 Sistema de Acceso</h1>
+            <p>Selecciona tu rol para continuar:</p>
+            <div class="menu">
+                <a href="/titular" class="btn btn-titular">🔑 Portal del Titular</a>
+                <a href="/portero" class="btn btn-portero">🛡️ Portal del Portero</a>
+            </div>
+            <div class="footer">Sistema de Autorización de Acceso con QR</div>
+        </div>
+    </body>
+    </html>
     """
 
 # ============================================================
