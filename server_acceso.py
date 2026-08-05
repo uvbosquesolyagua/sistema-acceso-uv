@@ -548,11 +548,12 @@ def portal_portero():
 
 
 # ============================================================
-# PORTAL DEL TITULAR (Generar QR)
+# PORTAL DEL TITULAR (Generar QR) - CON VALIDACIÓN DE FECHAS
 # ============================================================
 @app.route('/titular', methods=['GET', 'POST'])
 def portal_titular():
     if request.method == 'POST':
+        # Procesar formulario
         data = {
             'id_cta': request.form.get('id_cta'),
             'id_titular': request.form.get('id_titular'),
@@ -569,6 +570,33 @@ def portal_titular():
         }
         
         usuario = {'nombre': request.form.get('usuario_creacion', 'Titular')}
+        
+        # ============================================================
+        # VALIDACIÓN DE FECHAS (Evita fechas atrasadas o incongruentes)
+        # ============================================================
+        try:
+            # Obtener la fecha y hora actual del sistema
+            ahora = datetime.now()
+            
+            # Juntar fecha y hora de ingreso para comparar
+            fecha_ingreso_str = f"{data['fecha_ingreso']} {data['hora_ingreso']}"
+            fecha_ingreso_dt = datetime.strptime(fecha_ingreso_str, "%Y-%m-%d %H:%M")
+            
+            # Juntar fecha y hora de egreso para comparar
+            fecha_egreso_str = f"{data['fecha_egreso']} {data['hora_egreso']}"
+            fecha_egreso_dt = datetime.strptime(fecha_egreso_str, "%Y-%m-%d %H:%M")
+            
+            # 1. El ingreso no puede ser en el pasado
+            if fecha_ingreso_dt < ahora:
+                return "❌ Error: La fecha y hora de ingreso no pueden ser anteriores al momento actual."
+            
+            # 2. El egreso no puede ser antes o igual que el ingreso
+            if fecha_egreso_dt <= fecha_ingreso_dt:
+                return "❌ Error: La fecha y hora de egreso deben ser posteriores a la fecha y hora de ingreso."
+                
+        except Exception as e:
+            return f"❌ Error de formato en las fechas: {str(e)}"
+        # ============================================================
         
         try:
             resultado = service.crear_autorizacion(data, usuario)
