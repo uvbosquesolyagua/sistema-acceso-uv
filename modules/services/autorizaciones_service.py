@@ -117,11 +117,9 @@ class AutorizacionesService:
             autorizacion = dict(autorizacion)
             
             # ============================================================
-            # CORRECCIÓN DE ZONA HORARIA
+            # CORRECCIÓN DE ZONA HORARIA CON MARGEN DE SEGURIDAD DE 5 MINUTOS
             # ============================================================
-            # Usamos datetime.utcnow() para que la comparación sea justa.
-            # El servidor de Render y el usuario ahora usan el mismo "reloj universal".
-            ahora = datetime.utcnow()
+            ahora = datetime.now()
             
             fecha_ingreso = datetime.strptime(
                 f"{autorizacion['fecha_ingreso_autorizada']} {autorizacion['hora_ingreso_autorizada']}",
@@ -132,8 +130,10 @@ class AutorizacionesService:
                 "%Y-%m-%d %H:%M"
             )
             
-            # Verificar el estado con la hora universal
-            if ahora < fecha_ingreso:
+            # RESTAMOS 5 MINUTOS A LA HORA ACTUAL PARA DAR TOLERANCIA
+            ahora_con_margen = ahora - timedelta(minutes=5)
+            
+            if ahora_con_margen < fecha_ingreso:
                 autorizacion['estado_verificacion'] = 'Pendiente'
                 autorizacion['mensaje'] = '⏳ La autorización aún no está vigente'
             elif ahora > fecha_egreso:
