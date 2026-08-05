@@ -7,6 +7,12 @@ from datetime import datetime
 from modules.services.autorizaciones_service import AutorizacionesService
 from database.db import get_connection
 import os
+import sys 
+
+# CORRECCIÓN IMPORTANTE PARA RENDER:
+# Esto le dice a Python que busque las carpetas 'modules' y 'database' 
+# en la raíz del proyecto en el servidor.
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__)
 service = AutorizacionesService()
@@ -447,15 +453,27 @@ DASHBOARD_HTML = """
 """
 
 # ============================================================
-# RUTA PARA SERVIR IMÁGENES QR
+# RUTA PARA SERVIR IMÁGENES QR (CORREGIDA PARA RENDER)
 # ============================================================
 
 @app.route('/static/qr/<filename>')
 def serve_qr(filename):
-    ruta = os.path.join("C:\\SIGUV\\static\\qr", filename)
+    # CORRECCIÓN: Ya no usa rutas de Windows (C:\...). 
+    # Ahora usa una ruta relativa que funciona en Render.
+    ruta = os.path.join(app.root_path, "static", "qr", filename)
+    
     if os.path.exists(ruta):
         return send_file(ruta, mimetype='image/png')
-    return "❌ Imagen no encontrada", 404
+    
+    # Si no encuentra la imagen, muestra un error visual en lugar de crashear el servidor
+    return """
+    <div style='text-align:center; font-family:Arial; margin-top:50px;'>
+        <h1 style='color:#e74c3c;'>❌ Imagen no encontrada</h1>
+        <p>El archivo <strong>{}</strong> no existe en la carpeta <strong>static/qr/</strong> del servidor.</p>
+        <p>Sube la imagen a GitHub o crea la carpeta en Render.</p>
+        <a href='/' style='background:#3498db; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'>Volver al inicio</a>
+    </div>
+    """.format(filename), 404
 
 # ============================================================
 # INICIO DEL SERVIDOR
@@ -466,15 +484,14 @@ if __name__ == '__main__':
     print("🏠 SISTEMA DE AUTORIZACIÓN DE ACCESO - QR")
     print("=" * 60)
     print("📌 Servidor iniciado en:")
-    print("   • http://127.0.0.1:5000")
-    print("   • http://<TU_IP>:5000 (desde otros dispositivos)")
-    print("")
+    print("   • http://0.0.0.0:10000")
+    print("=" * 60)
     print("📌 Accesos:")
     print("   • /titular  → Generar QR")
-    print("   • /portero  → Escanear QR (usa /acceso?token=xxx)")
+    print("   • /acceso?token=xxx  → Validar token")
     print("   • /dashboard_acceso → Estadísticas")
     print("=" * 60)
-    print("Presione Ctrl+C para detener el servidor")
-    print("=" * 60)
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Render usa el puerto 10000 por defecto en sus planes gratuitos, 
+    # pero Gunicorn lo tomará de la variable de entorno, así que usamos 10000 o 5000.
+    app.run(host='0.0.0.0', port=10000, debug=False)
