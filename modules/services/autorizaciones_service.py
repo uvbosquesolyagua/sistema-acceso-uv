@@ -1,16 +1,17 @@
 # modules/services/autorizaciones_service.py
-# Servicio de Autorización de Acceso con QR
+# Servicio de Autorización de Acceso con QR (Versión Base64 sin disco)
 
 import sqlite3
-import hashlib
 import secrets
 import qrcode
 import os
-from datetime import datetime, timedelta
+import io
+import base64
+from datetime import datetime
 from database.db import get_connection
 
 # ============================================================
-# PARCHE PARA AUDITORIA (Agregado para que el servidor arranque)
+# PARCHE PARA AUDITORIA
 # ============================================================
 class AuditoriaService:
     def __init__(self):
@@ -22,38 +23,34 @@ class AuditoriaService:
 class AutorizacionesService:
     def __init__(self):
         self.auditoria = AuditoriaService()
-        self.carpeta_qr = "C:\\SIGUV\\static\\qr"
-        os.makedirs(self.carpeta_qr, exist_ok=True)
+        # Ya no necesitamos carpeta de disco
     
     def generar_token(self):
-        """Genera un token único para cada autorización"""
         return secrets.token_urlsafe(32)
     
-    def generar_qr_url(self, token, host="192.168.1.100", port=5000):
-        """Genera la URL completa para el QR"""
-        return f"http://{host}:{port}/acceso?token={token}"
+    def generar_qr_url(self, token, host="sistema-acceso-uv-1.onrender.com", port=80):
+        # Genera la URL completa. Como es Render, usamos el dominio real y puerto 80 (https)
+        return f"https://{host}/acceso?token={token}"
     
-    def generar_imagen_qr(self, url, token):
-        """Genera la imagen QR y la guarda en disco"""
-        nombre_archivo = f"qr_{token}.png"
-        ruta_archivo = os.path.join(self.carpeta_qr, nombre_archivo)
-        
+    def generar_qr_base64(self, url):
+        """Genera la imagen QR en memoria y la convierte a texto base64"""
         img = qrcode.make(url)
-        img.save(ruta_archivo)
         
-        return ruta_archivo
+        # Guardar la imagen en memoria (RAM) en lugar de disco
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
+        
+        # Convertir a texto base64 para incrustarlo en el HTML
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{img_base64}"
     
     def crear_autorizacion(self, data, usuario):
-        """
-        Crea una nueva autorización de acceso
-        
-        Args:
-            data: dict con todos los campos
-            usuario: dict con nombre y rol
-        """
         token = self.generar_token()
         url = self.generar_qr_url(token)
-        ruta_qr = self.generar_imagen_qr(url, token)
+        
+        # Aquí generamos el QR en base64 (no guardamos nada en disco)
+        qr_base64 = self.generar_qr_base64(url)
         
         fecha_actual = datetime.now().isoformat()
         
@@ -82,7 +79,7 @@ class AutorizacionesService:
             data['hora_egreso'],
             data.get('motivo', ''),
             data.get('relacion', 'Familiar'),
-            ruta_qr,
+            '',  # El QR se guarda en la base64, no en ruta de archivo
             token,
             fecha_actual,
             usuario.get('nombre', 'Sistema')
@@ -92,24 +89,24 @@ class AutorizacionesService:
         id_autorizacion = cursor.lastrowid
         conn.close()
         
-        # Auditoría
         self.auditoria.registrar(
             usuario=usuario,
             modulo="autorizaciones",
             accion="crear_autorizacion",
-            descripcion=f"Autorización para {data['visitante_nombre']} - Token: {token}"
+            descripcion=f"Autorización para {data['visitante_nombre']}"
         )
         
         return {
             'id': id_autorizacion,
             'token': token,
             'url': url,
-            'qr_path': ruta_qr,
-            'qr_image': f"qr_{token}.png"
+            'qr_base64': qr_base64  # <--- ¡Esto es lo nuevo!
         }
     
+    # El resto de las funciones (validar_token, registrar_ingreso, etc.) se mantienen IGUAL.
+    # Solo asegúrate de que el HTML que usa 'qr_base64' lo muestre así: <img src="{{ qr_base64 }}">
+
     def validar_token(self, token):
-        """Valida si un token es válido y retorna los datos de la autorización"""
         try:
             conn = get_connection()
             conn.row_factory = sqlite3.Row
@@ -131,7 +128,6 @@ class AutorizacionesService:
             
             autorizacion = dict(autorizacion)
             
-            # Verificar vigencia
             ahora = datetime.now()
             fecha_ingreso = datetime.strptime(
                 f"{autorizacion['fecha_ingreso_autorizada']} {autorizacion['hora_ingreso_autorizada']}",
@@ -159,13 +155,11 @@ class AutorizacionesService:
             return None
     
     def registrar_ingreso(self, id_autorizacion, portero):
-        """Registra el ingreso de un visitante"""
         fecha_actual = datetime.now()
         
         conn = get_connection()
         conn.row_factory = sqlite3.Row
         
-        # Verificar si ya tiene ingreso registrado
         existe = conn.execute("""
             SELECT id FROM registros_acceso
             WHERE id_autorizacion = ? AND fecha_egreso IS NULL
@@ -175,7 +169,6 @@ class AutorizacionesService:
             conn.close()
             return {'success': False, 'mensaje': 'El ingreso ya fue registrado'}
         
-        # Registrar ingreso
         cursor = conn.execute("""
             INSERT INTO registros_acceso (
                 id_autorizacion, fecha_ingreso, hora_ingreso, portero_ingreso
@@ -199,7 +192,6 @@ class AutorizacionesService:
         }
     
     def registrar_egreso(self, id_registro, portero):
-        """Registra el egreso de un visitante"""
         fecha_actual = datetime.now()
         
         conn = get_connection()
@@ -225,7 +217,6 @@ class AutorizacionesService:
         }
     
     def obtener_historial(self, id_cta=None, limite=50):
-        """Obtiene el historial de autorizaciones y accesos"""
         try:
             conn = get_connection()
             conn.row_factory = sqlite3.Row
@@ -265,7 +256,6 @@ class AutorizacionesService:
             return []
     
     def revocar_autorizacion(self, id_autorizacion, motivo, usuario):
-        """Revoca una autorización activa"""
         conn = get_connection()
         conn.execute("""
             UPDATE autorizaciones_acceso
@@ -285,7 +275,7 @@ class AutorizacionesService:
             usuario=usuario,
             modulo="autorizaciones",
             accion="revocar_autorizacion",
-            descripcion=f"Revocada autorización ID {id_autorizacion} - Motivo: {motivo}"
+            descripcion=f"Revocada autorización ID {id_autorizacion}"
         )
         
         return {'success': True, 'mensaje': '✅ Autorización revocada'}
