@@ -7,7 +7,7 @@ import qrcode
 import os
 import io
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from database.db import get_connection
 
 # ============================================================
@@ -117,23 +117,22 @@ class AutorizacionesService:
             autorizacion = dict(autorizacion)
             
             # ============================================================
-            # CORRECCIÓN DE ZONA HORARIA CON MARGEN DE SEGURIDAD DE 5 MINUTOS
+            # CORRECCIÓN FINAL DE ZONA HORARIA (UTC)
             # ============================================================
-            ahora = datetime.now()
+            # Para evitar problemas de zonas horarias, usamos UTC que es universal.
+            ahora = datetime.now(timezone.utc)
             
             fecha_ingreso = datetime.strptime(
                 f"{autorizacion['fecha_ingreso_autorizada']} {autorizacion['hora_ingreso_autorizada']}",
                 "%Y-%m-%d %H:%M"
-            )
+            ).replace(tzinfo=timezone.utc) # Forzamos a que estas fechas también sean UTC
+            
             fecha_egreso = datetime.strptime(
                 f"{autorizacion['fecha_egreso_autorizada']} {autorizacion['hora_egreso_autorizada']}",
                 "%Y-%m-%d %H:%M"
-            )
+            ).replace(tzinfo=timezone.utc) # Forzamos a que estas fechas también sean UTC
             
-            # RESTAMOS 5 MINUTOS A LA HORA ACTUAL PARA DAR TOLERANCIA
-            ahora_con_margen = ahora - timedelta(minutes=5)
-            
-            if ahora_con_margen < fecha_ingreso:
+            if ahora < fecha_ingreso:
                 autorizacion['estado_verificacion'] = 'Pendiente'
                 autorizacion['mensaje'] = '⏳ La autorización aún no está vigente'
             elif ahora > fecha_egreso:
