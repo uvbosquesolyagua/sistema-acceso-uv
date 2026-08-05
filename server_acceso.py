@@ -119,7 +119,18 @@ RESULTADO_QR_HTML = """
         .btn-wa { background: #25D366; }
         .btn-share { background: #9b59b6; }
         .info { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .token { font-family: monospace; background: #ecf0f1; padding: 10px; border-radius: 5px; word-break: break-all; }
+        
+        /* CORRECCIÓN PARA QUE EL TEXTO LARGO NO SE CORTE EN EL CELULAR */
+        .token-box { 
+            font-family: monospace; 
+            background: #ecf0f1; 
+            padding: 10px; 
+            border-radius: 5px; 
+            word-break: break-all; 
+            white-space: pre-wrap; 
+            font-size: 13px;
+            display: block;
+        }
         .action-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
         @media (min-width: 600px) {
             .action-buttons { flex-direction: row; justify-content: center; flex-wrap: wrap; }
@@ -138,8 +149,8 @@ RESULTADO_QR_HTML = """
             <p><strong>👤 Visitante:</strong> {{ visitante_nombre }}</p>
             <p><strong>📄 DNI:</strong> {{ visitante_dni }}</p>
             <p><strong>📅 Vigencia:</strong> {{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }} - {{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}</p>
-            <p><strong>🔑 Token:</strong> <span class="token">{{ token }}</span></p>
-            <p><strong>🔗 Enlace:</strong> <span class="token">{{ url }}</span></p>
+            <p><strong>🔑 Token:</strong> <span class="token-box">{{ token }}</span></p>
+            <p><strong>🔗 Enlace:</strong> <span class="token-box">{{ url }}</span></p>
         </div>
         
         <div class="action-buttons">
