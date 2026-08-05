@@ -7,7 +7,7 @@ import qrcode
 import os
 import io
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from database.db import get_connection
 
 # ============================================================
@@ -23,33 +23,24 @@ class AuditoriaService:
 class AutorizacionesService:
     def __init__(self):
         self.auditoria = AuditoriaService()
-        # Ya no necesitamos carpeta de disco
     
     def generar_token(self):
         return secrets.token_urlsafe(32)
     
     def generar_qr_url(self, token, host="sistema-acceso-uv-1.onrender.com", port=80):
-        # Genera la URL completa. Como es Render, usamos el dominio real y puerto 80 (https)
         return f"https://{host}/acceso?token={token}"
     
     def generar_qr_base64(self, url):
-        """Genera la imagen QR en memoria y la convierte a texto base64"""
         img = qrcode.make(url)
-        
-        # Guardar la imagen en memoria (RAM) en lugar de disco
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
-        
-        # Convertir a texto base64 para incrustarlo en el HTML
         img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{img_base64}"
     
     def crear_autorizacion(self, data, usuario):
         token = self.generar_token()
         url = self.generar_qr_url(token)
-        
-        # Aquí generamos el QR en base64 (no guardamos nada en disco)
         qr_base64 = self.generar_qr_base64(url)
         
         fecha_actual = datetime.now().isoformat()
@@ -79,7 +70,7 @@ class AutorizacionesService:
             data['hora_egreso'],
             data.get('motivo', ''),
             data.get('relacion', 'Familiar'),
-            '',  # El QR se guarda en la base64, no en ruta de archivo
+            '',
             token,
             fecha_actual,
             usuario.get('nombre', 'Sistema')
@@ -100,12 +91,9 @@ class AutorizacionesService:
             'id': id_autorizacion,
             'token': token,
             'url': url,
-            'qr_base64': qr_base64  # <--- ¡Esto es lo nuevo!
+            'qr_base64': qr_base64
         }
     
-    # El resto de las funciones (validar_token, registrar_ingreso, etc.) se mantienen IGUAL.
-    # Solo asegúrate de que el HTML que usa 'qr_base64' lo muestre así: <img src="{{ qr_base64 }}">
-
     def validar_token(self, token):
         try:
             conn = get_connection()
@@ -128,7 +116,13 @@ class AutorizacionesService:
             
             autorizacion = dict(autorizacion)
             
-            ahora = datetime.now()
+            # ============================================================
+            # CORRECCIÓN DE ZONA HORARIA
+            # ============================================================
+            # Usamos datetime.utcnow() para que la comparación sea justa.
+            # El servidor de Render y el usuario ahora usan el mismo "reloj universal".
+            ahora = datetime.utcnow()
+            
             fecha_ingreso = datetime.strptime(
                 f"{autorizacion['fecha_ingreso_autorizada']} {autorizacion['hora_ingreso_autorizada']}",
                 "%Y-%m-%d %H:%M"
@@ -138,6 +132,7 @@ class AutorizacionesService:
                 "%Y-%m-%d %H:%M"
             )
             
+            # Verificar el estado con la hora universal
             if ahora < fecha_ingreso:
                 autorizacion['estado_verificacion'] = 'Pendiente'
                 autorizacion['mensaje'] = '⏳ La autorización aún no está vigente'
@@ -147,6 +142,7 @@ class AutorizacionesService:
             else:
                 autorizacion['estado_verificacion'] = 'Valida'
                 autorizacion['mensaje'] = '✅ Autorización válida'
+            # ============================================================
             
             return autorizacion
             
@@ -195,7 +191,6 @@ class AutorizacionesService:
         fecha_actual = datetime.now()
         
         conn = get_connection()
-        
         conn.execute("""
             UPDATE registros_acceso
             SET fecha_egreso = ?, hora_egreso = ?, portero_egreso = ?
@@ -206,7 +201,6 @@ class AutorizacionesService:
             portero,
             id_registro
         ))
-        
         conn.commit()
         conn.close()
         
