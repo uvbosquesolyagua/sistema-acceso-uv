@@ -119,18 +119,17 @@ class AutorizacionesService:
             # ============================================================
             # CORRECCIÓN FINAL DE ZONA HORARIA (UTC)
             # ============================================================
-            # Para evitar problemas de zonas horarias, usamos UTC que es universal.
             ahora = datetime.now(timezone.utc)
             
             fecha_ingreso = datetime.strptime(
                 f"{autorizacion['fecha_ingreso_autorizada']} {autorizacion['hora_ingreso_autorizada']}",
                 "%Y-%m-%d %H:%M"
-            ).replace(tzinfo=timezone.utc) # Forzamos a que estas fechas también sean UTC
+            ).replace(tzinfo=timezone.utc)
             
             fecha_egreso = datetime.strptime(
                 f"{autorizacion['fecha_egreso_autorizada']} {autorizacion['hora_egreso_autorizada']}",
                 "%Y-%m-%d %H:%M"
-            ).replace(tzinfo=timezone.utc) # Forzamos a que estas fechas también sean UTC
+            ).replace(tzinfo=timezone.utc)
             
             if ahora < fecha_ingreso:
                 autorizacion['estado_verificacion'] = 'Pendiente'
