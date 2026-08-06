@@ -254,7 +254,7 @@ FORMULARIO_TITULAR_HTML = """
 """
 
 # ============================================================
-# VALIDACION_QR_HTML CON LÓGICA VISUAL PARA EGRESO (¡El cambio clave!)
+# VALIDACION_QR_HTML CON LÓGICA DIRECTA DEL SERVIDOR
 # ============================================================
 VALIDACION_QR_HTML = """
 <!DOCTYPE html>
@@ -275,11 +275,17 @@ VALIDACION_QR_HTML = """
         .btn-blue { background: #3498db; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .action-zone { margin-top: 15px; padding: 15px; border-top: 1px solid #eee; }
+        .input-group { text-align: center; margin: 10px 0; }
+        input[type="text"] { padding: 10px; border: 2px solid #ddd; border-radius: 5px; width: 80%; max-width: 200px; font-size: 16px; text-align: center; }
     </style>
 </head>
 <body>
-    <div class="container" id="mainContainer">
-        <h1 id="statusTitle">⏳ Verificando...</h1>
+    <div class="container">
+        <h1 style="color: {% if estado_verificacion == 'Valida' %}#27ae60{% elif estado_verificacion == 'Pendiente' %}#f39c12{% else %}#e74c3c{% endif %};">
+            {% if estado_verificacion == 'Valida' %}✅ Acceso Autorizado
+            {% elif estado_verificacion == 'Pendiente' %}⏳ Autorización Pendiente
+            {% else %}❌ Autorización Vencida{% endif %}
+        </h1>
         
         <div class="info">
             <p><strong>👤 Visitante:</strong> {{ visitante_nombre }}</p>
@@ -287,7 +293,9 @@ VALIDACION_QR_HTML = """
             <p><strong>🏠 Propiedad:</strong> CTA-{{ codigo_cta }} - {{ titular_nombre }}</p>
             <p><strong>📅 Vigencia:</strong> {{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }} - {{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}</p>
             <p><strong>📌 Motivo:</strong> {{ motivo or 'No especificado' }}</p>
-            <p><strong>📊 Estado del sistema:</strong> <span id="statusMessage" style="font-weight: bold; color: #f39c12;">⏳ Validando horario local...</span></p>
+            <p><strong>📊 Estado:</strong> <span style="font-weight: bold; color: {% if estado_verificacion == 'Valida' %}#27ae60{% elif estado_verificacion == 'Pendiente' %}#f39c12{% else %}#e74c3c{% endif %};">
+                {{ mensaje }}
+            </span></p>
         </div>
         
         <!-- ZONA DE ACCIÓN (INGRESO O EGRESO SEGÚN CORRESPONDA) -->
@@ -306,7 +314,7 @@ VALIDACION_QR_HTML = """
                     <p style="font-weight: bold; color: #555;">🔒 Verificación de Seguridad (Ingreso)</p>
                     <p>Pregunte al visitante su número de DNI para confirmar su identidad.</p>
                     <div class="input-group">
-                        <input type="text" id="dniInput" placeholder="Ingrese DNI del visitante" autocomplete="off" style="padding: 10px; border: 2px solid #ddd; border-radius: 5px; width: 80%; max-width: 200px; font-size: 16px; text-align: center;">
+                        <input type="text" id="dniInput" placeholder="Ingrese DNI" autocomplete="off">
                         <br>
                         <button class="btn btn-green" id="btnVerify" onclick="verificarYRegistrar({{ id }}, '{{ visitante_dni }}')">🔍 Verificar y Registrar Ingreso</button>
                     </div>
@@ -314,50 +322,41 @@ VALIDACION_QR_HTML = """
                 {% endif %}
 
             {% else %}
-                <button class="btn" style="background: #95a5a6;" disabled>⛔ Acceso Denegado</button>
+                <button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>
             {% endif %}
         </div>
 
         <br><br>
-        <a href="/portero" class="btn btn-blue" style="text-decoration: none;">🔄 Escanear otro QR</a>
-        <a href="/" class="btn btn-blue" style="text-decoration: none;">🏠 Inicio</a>
+        <a href="/portero" class="btn btn-blue" style="text-decoration: none; display: inline-block;">🔄 Escanear otro QR</a>
+        <a href="/" class="btn btn-blue" style="text-decoration: none; display: inline-block;">🏠 Inicio</a>
     </div>
     
     <script>
-        // ============================================================
-        // LÓGICA PARA EL INGRESO (Cuando está afuera)
-        // ============================================================
+        // Lógica para Ingreso
         function verificarYRegistrar(id, dniCorrecto) {
             const dniIngresado = document.getElementById('dniInput').value.trim();
             const mensajeDiv = document.getElementById('resultMessage');
-
             if (dniIngresado === '') {
                 mensajeDiv.innerHTML = '<span style="color: #f39c12;">⚠️ Por favor, ingrese el DNI.</span>';
                 return;
             }
-
             if (dniIngresado !== dniCorrecto) {
                 mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ DNI INCORRECTO. No se puede registrar el ingreso.</span>';
                 document.getElementById('dniInput').value = '';
                 return;
             }
-
             mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ DNI Verificado. Registrando ingreso...</span>';
             document.getElementById('btnVerify').disabled = true;
-
             fetch('/registrar_ingreso', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    id_autorizacion: id,
-                    portero: 'Portero'
-                })
+                body: JSON.stringify({ id_autorizacion: id, portero: 'Portero' })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ ' + data.mensaje + '</span>';
-                    setTimeout(() => { location.reload(); }, 1500); // Recargar para mostrar el botón rojo
+                    setTimeout(() => { location.reload(); }, 1500);
                 } else {
                     mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ Error: ' + data.mensaje + '</span>';
                 }
@@ -367,36 +366,23 @@ VALIDACION_QR_HTML = """
             });
         }
 
-        // ============================================================
-        // LÓGICA PARA EL EGRESO (Cuando ya está dentro)
-        // ============================================================
+        // Lógica para Egreso
         function registrarEgresoDirecto(id) {
             if (!confirm("¿Está seguro de que el visitante se retira del predio?")) return;
-
             const mensajeDiv = document.getElementById('resultEgreso');
             mensajeDiv.innerHTML = '<span style="color: #f39c12;">⏳ Procesando egreso...</span>';
-
-            // Primero obtenemos el ID del registro activo
             fetch('/registrar_ingreso', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    id_autorizacion: id,
-                    portero: 'Portero'
-                })
+                body: JSON.stringify({ id_autorizacion: id, portero: 'Portero' })
             })
             .then(response => response.json())
             .then(data => {
                 if (!data.success && data.id_registro) {
-                    // El sistema nos dice que ya existe un ingreso activo y nos pasa su ID
-                    // Ahora registramos el egreso con ese ID
                     return fetch('/registrar_egreso', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            id_registro: data.id_registro,
-                            portero: 'Portero'
-                        })
+                        body: JSON.stringify({ id_registro: data.id_registro, portero: 'Portero' })
                     });
                 } else {
                     throw new Error("No se encontró un ingreso activo.");
