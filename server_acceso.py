@@ -9,25 +9,17 @@ from database.db import get_connection
 import os
 import sys 
 
-# CORRECCIÓN IMPORTANTE PARA RENDER:
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# ============================================================
-# PARCHE PARA AUDITORIA
-# ============================================================
 class AuditoriaService:
     def __init__(self):
         pass
     def registrar_log(self, *args, **kwargs):
         pass
-# ============================================================
 
 app = Flask(__name__)
 service = AutorizacionesService()
 
-# ============================================================
-# CORRECCIÓN FINAL: CREAR LA BASE DE DATOS AUTOMÁTICAMENTE
-# ============================================================
 def inicializar_base_datos():
     try:
         conn = get_connection()
@@ -97,7 +89,6 @@ def inicializar_base_datos():
         print(f"⚠️ Error al inicializar la base de datos: {e}")
 
 inicializar_base_datos()
-# ============================================================
 
 
 # ============================================================
@@ -142,7 +133,6 @@ RESULTADO_QR_HTML = """
             <h3 style="color: #555; font-size: 16px; margin-bottom: 15px;">📲 Notificaciones Inteligentes</h3>
             
             <div class="action-buttons">
-                <!-- ÚNICO BOTÓN: Envía al Visitante y al Portero al mismo tiempo -->
                 <button class="btn btn-wa" onclick="enviarNotificaciones()">📲 Enviar Notificaciones</button>
             </div>
         </div>
@@ -162,7 +152,6 @@ RESULTADO_QR_HTML = """
         const telPortero = "{{ telefono_portero }}";
         
         function enviarNotificaciones() {
-            // 1. Abrir WhatsApp al Visitante
             if (telVisitante) {
                 const msgVisitante = `Hola ${nombre}! Aquí tienes tu enlace de acceso al condominio. Por favor, preséntaselo al portero cuando llegues: ${enlaceCompleto}`;
                 const urlVisitante = `https://wa.me/${telVisitante}?text=${encodeURIComponent(msgVisitante)}`;
@@ -171,14 +160,10 @@ RESULTADO_QR_HTML = """
                 alert("⚠️ No cargaste el teléfono del visitante.");
             }
 
-            // 2. Abrir WhatsApp al Portero (en una pestaña separada)
             if (telPortero) {
                 const msgPortero = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Ingrese el DNI en el sistema.`;
                 const urlPortero = `https://wa.me/${telPortero}?text=${encodeURIComponent(msgPortero)}`;
-                
-                setTimeout(() => {
-                    window.open(urlPortero, '_blank');
-                }, 500);
+                setTimeout(() => { window.open(urlPortero, '_blank'); }, 500);
             } else {
                 alert("⚠️ No cargaste el teléfono del portero.");
             }
@@ -268,6 +253,9 @@ FORMULARIO_TITULAR_HTML = """
 </html>
 """
 
+# ============================================================
+# VALIDACION_QR_HTML CON LÓGICA VISUAL PARA EGRESO (¡El cambio clave!)
+# ============================================================
 VALIDACION_QR_HTML = """
 <!DOCTYPE html>
 <html>
@@ -281,14 +269,12 @@ VALIDACION_QR_HTML = """
         .invalid { color: #e74c3c; }
         .pending { color: #f39c12; }
         .info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .input-group { margin-top: 15px; text-align: center; }
-        input[type="text"] { padding: 10px; border: 2px solid #ddd; border-radius: 5px; width: 80%; max-width: 200px; font-size: 16px; text-align: center; }
-        input[type="text"]:focus { border-color: #2196F3; outline: none; }
-        .btn { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; font-weight: bold; color: white; }
+        .btn-green { background: #27ae60; }
         .btn-red { background: #e74c3c; }
         .btn-blue { background: #3498db; }
-        .btn-verify { background: #2196F3; margin-top: 10px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .action-zone { margin-top: 15px; padding: 15px; border-top: 1px solid #eee; }
     </style>
 </head>
 <body>
@@ -304,55 +290,43 @@ VALIDACION_QR_HTML = """
             <p><strong>📊 Estado del sistema:</strong> <span id="statusMessage" style="font-weight: bold; color: #f39c12;">⏳ Validando horario local...</span></p>
         </div>
         
-        <div id="verificationSection" style="display: none;">
-            <p style="font-weight: bold; color: #555;">🔒 Verificación de Seguridad</p>
-            <p>Pregunte al visitante su número de DNI para confirmar su identidad.</p>
-            <div class="input-group">
-                <input type="text" id="dniInput" placeholder="Ingrese DNI del visitante" autocomplete="off">
-                <br>
-                <button class="btn btn-verify" id="btnVerify" onclick="verificarYRegistrar({{ id }}, '{{ visitante_dni }}')">🔍 Verificar y Registrar Ingreso</button>
-            </div>
-            <div id="resultMessage" style="margin-top: 10px; font-weight: bold;"></div>
-        </div>
-        
-        <div id="deniedSection" style="display: none;">
-            <button class="btn" disabled>⛔ Acceso Denegado</button>
+        <!-- ZONA DE ACCIÓN (INGRESO O EGRESO SEGÚN CORRESPONDA) -->
+        <div class="action-zone">
+            {% if estado_verificacion == 'Valida' %}
+                
+                {% if estado_acceso_fisico == 'Dentro' %}
+                    <!-- EL VISITANTE YA ESTÁ DENTRO: MOSTRAMOS EGRESO -->
+                    <h2 style="color: #e74c3c;">🚪 Visitante en el predio</h2>
+                    <p>El visitante ya se encuentra dentro. ¿Desea registrar su salida?</p>
+                    <button class="btn btn-red" onclick="registrarEgresoDirecto({{ id }})">🚪 Registrar Egreso</button>
+                    <div id="resultEgreso" style="margin-top: 10px; font-weight: bold;"></div>
+                
+                {% else %}
+                    <!-- EL VISITANTE NO HA ENTRADO: MOSTRAMOS VERIFICACIÓN DE INGRESO -->
+                    <p style="font-weight: bold; color: #555;">🔒 Verificación de Seguridad (Ingreso)</p>
+                    <p>Pregunte al visitante su número de DNI para confirmar su identidad.</p>
+                    <div class="input-group">
+                        <input type="text" id="dniInput" placeholder="Ingrese DNI del visitante" autocomplete="off" style="padding: 10px; border: 2px solid #ddd; border-radius: 5px; width: 80%; max-width: 200px; font-size: 16px; text-align: center;">
+                        <br>
+                        <button class="btn btn-green" id="btnVerify" onclick="verificarYRegistrar({{ id }}, '{{ visitante_dni }}')">🔍 Verificar y Registrar Ingreso</button>
+                    </div>
+                    <div id="resultMessage" style="margin-top: 10px; font-weight: bold;"></div>
+                {% endif %}
+
+            {% else %}
+                <button class="btn" style="background: #95a5a6;" disabled>⛔ Acceso Denegado</button>
+            {% endif %}
         </div>
 
         <br><br>
-        <a href="/portero" class="btn btn-blue">🔄 Escanear otro QR</a>
-        <a href="/" class="btn btn-blue">🏠 Inicio</a>
+        <a href="/portero" class="btn btn-blue" style="text-decoration: none;">🔄 Escanear otro QR</a>
+        <a href="/" class="btn btn-blue" style="text-decoration: none;">🏠 Inicio</a>
     </div>
     
     <script>
-        const fechaIngresoStr = "{{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }}";
-        const fechaEgresoStr = "{{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}";
-
-        const fechaIngreso = new Date(fechaIngresoStr.replace(' ', 'T'));
-        const fechaEgreso = new Date(fechaEgresoStr.replace(' ', 'T'));
-        const ahora = new Date();
-
-        const statusMessage = document.getElementById('statusMessage');
-        const statusTitle = document.getElementById('statusTitle');
-        const verificationSection = document.getElementById('verificationSection');
-        const deniedSection = document.getElementById('deniedSection');
-
-        if (ahora < fechaIngreso) {
-            statusTitle.innerHTML = '⏳ Autorización Pendiente';
-            statusMessage.innerHTML = '<span style="color: #f39c12;">⏳ La autorización aún no está vigente (según tu celular).</span>';
-            deniedSection.style.display = 'block';
-        } else if (ahora > fechaEgreso) {
-            statusTitle.innerHTML = '❌ Autorización Vencida';
-            statusMessage.innerHTML = '<span style="color: #e74c3c;">⚠️ La autorización ha vencido (según tu celular).</span>';
-            deniedSection.style.display = 'block';
-        } else {
-            statusTitle.innerHTML = '✅ Acceso Autorizado';
-            statusMessage.innerHTML = '<span style="color: #27ae60;">✅ Autorización válida en este momento.</span>';
-            verificationSection.style.display = 'block';
-        }
-
-        let idRegistro = null;
-
+        // ============================================================
+        // LÓGICA PARA EL INGRESO (Cuando está afuera)
+        // ============================================================
         function verificarYRegistrar(id, dniCorrecto) {
             const dniIngresado = document.getElementById('dniInput').value.trim();
             const mensajeDiv = document.getElementById('resultMessage');
@@ -383,8 +357,7 @@ VALIDACION_QR_HTML = """
             .then(data => {
                 if (data.success) {
                     mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ ' + data.mensaje + '</span>';
-                    document.getElementById('verificationSection').innerHTML = '<h2 style="color: #27ae60;">✅ Ingreso Registrado</h2><p>El visitante ha ingresado correctamente.</p><button class="btn btn-red" onclick="registrarEgreso(' + data.id_registro + ')">🚪 Registrar Egreso</button>';
-                    idRegistro = data.id_registro;
+                    setTimeout(() => { location.reload(); }, 1500); // Recargar para mostrar el botón rojo
                 } else {
                     mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ Error: ' + data.mensaje + '</span>';
                 }
@@ -394,26 +367,53 @@ VALIDACION_QR_HTML = """
             });
         }
 
-        function registrarEgreso(id) {
-            if (!id) return;
-            fetch('/registrar_egreso', {
+        // ============================================================
+        // LÓGICA PARA EL EGRESO (Cuando ya está dentro)
+        // ============================================================
+        function registrarEgresoDirecto(id) {
+            if (!confirm("¿Está seguro de que el visitante se retira del predio?")) return;
+
+            const mensajeDiv = document.getElementById('resultEgreso');
+            mensajeDiv.innerHTML = '<span style="color: #f39c12;">⏳ Procesando egreso...</span>';
+
+            // Primero obtenemos el ID del registro activo
+            fetch('/registrar_ingreso', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    id_registro: id,
+                    id_autorizacion: id,
                     portero: 'Portero'
                 })
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    alert(data.mensaje);
-                    document.getElementById('verificationSection').innerHTML = '<h2 style="color: #7f8c8d;">⬜ Egreso Registrado</h2>';
+                if (!data.success && data.id_registro) {
+                    // El sistema nos dice que ya existe un ingreso activo y nos pasa su ID
+                    // Ahora registramos el egreso con ese ID
+                    return fetch('/registrar_egreso', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            id_registro: data.id_registro,
+                            portero: 'Portero'
+                        })
+                    });
                 } else {
-                    alert('❌ Error: ' + data.mensaje);
+                    throw new Error("No se encontró un ingreso activo.");
                 }
             })
-            .catch(error => alert('❌ Error de conexión: ' + error));
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    mensajeDiv.innerHTML = '<span style="color: #27ae60;">✅ ' + data.mensaje + ' (Circuito cerrado)</span>';
+                    document.querySelector('.action-zone').innerHTML = '<h2 style="color: #7f8c8d;">⬜ Egreso Registrado</h2><p>El visitante abandonó el predio.</p>';
+                } else {
+                    mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ Error: ' + data.mensaje + '</span>';
+                }
+            })
+            .catch(error => {
+                mensajeDiv.innerHTML = '<span style="color: #e74c3c;">❌ Error de conexión: ' + error + '</span>';
+            });
         }
     </script>
 </body>
@@ -497,8 +497,9 @@ DASHBOARD_HTML = """
 
 
 # ============================================================
-# PÁGINA PRINCIPAL - DISEÑO ESTILO APP PROFESIONAL
+# RUTAS Y LÓGICA DE LA APP
 # ============================================================
+
 @app.route('/')
 def index():
     return """
@@ -534,9 +535,6 @@ def index():
     """
 
 
-# ============================================================
-# PORTAL DEL PORTERO - BUSCADOR INTELIGENTE (Entrada y Salida por DNI)
-# ============================================================
 @app.route('/portero')
 def portal_portero():
     return """
@@ -551,10 +549,7 @@ def portal_portero():
             h1 { color: #2196F3; }
             p { color: #555; margin-bottom: 20px; }
             .input-group { display: flex; flex-direction: column; gap: 15px; }
-            textarea { 
-                padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; resize: none; height: 80px;
-                font-family: monospace;
-            }
+            textarea { padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; resize: none; height: 80px; font-family: monospace; }
             textarea:focus { border-color: #2196F3; outline: none; }
             .btn { padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; width: 100%; text-decoration: none; display: inline-block; box-sizing: border-box; }
             .btn-validar { background: #2196F3; }
@@ -570,14 +565,11 @@ def portal_portero():
             <div class="badge">🛡️ Herramienta del Portero</div>
             <h1>🛡️ Portal del Portero</h1>
             <p>Para registrar una <strong>ENTRADA</strong> o una <strong>SALIDA</strong>, escriba el DNI del visitante.</p>
-            
             <div class="instruccion">💡 Pregunte al visitante su DNI y escríbalo aquí.</div>
-            
             <form action="/acceso" method="GET" class="input-group">
                 <textarea name="token" placeholder="Ej: 5555" required></textarea>
                 <button type="submit" class="btn btn-validar">🔍 Buscar y Gestionar Acceso</button>
             </form>
-            
             <a href="/" class="btn btn-volver">🏠 Volver al inicio</a>
         </div>
     </body>
@@ -585,15 +577,11 @@ def portal_portero():
     """
 
 
-# ============================================================
-# PORTAL DEL TITULAR (Generar QR)
-# ============================================================
 @app.route('/titular', methods=['GET', 'POST'])
 def portal_titular():
-    error = None  # Variable para guardar mensajes de error
+    error = None
     
     if request.method == 'POST':
-        # Procesar formulario
         data = {
             'id_cta': request.form.get('id_cta'),
             'id_titular': request.form.get('id_titular'),
@@ -608,30 +596,21 @@ def portal_titular():
             'motivo': request.form.get('motivo'),
             'relacion': request.form.get('relacion')
         }
-        
         usuario = {'nombre': request.form.get('usuario_creacion', 'Titular')}
         
-        # ============================================================
-        # VALIDACIÓN DE FECHAS CORREGIDA (Solo verifica coherencia)
-        # ============================================================
         try:
             fecha_ingreso_str = f"{data['fecha_ingreso']} {data['hora_ingreso']}"
             fecha_ingreso_dt = datetime.strptime(fecha_ingreso_str, "%Y-%m-%d %H:%M")
-            
             fecha_egreso_str = f"{data['fecha_egreso']} {data['hora_egreso']}"
             fecha_egreso_dt = datetime.strptime(fecha_egreso_str, "%Y-%m-%d %H:%M")
-            
             if fecha_egreso_dt <= fecha_ingreso_dt:
                 error = "❌ Error: La fecha y hora de egreso deben ser posteriores a la fecha y hora de ingreso."
-                
         except Exception as e:
             error = f"❌ Error de formato en las fechas: {str(e)}"
-        # ============================================================
         
         if error is None:
             try:
                 resultado = service.crear_autorizacion(data, usuario)
-                
                 return render_template_string(
                     RESULTADO_QR_HTML, 
                     **resultado,
@@ -650,25 +629,16 @@ def portal_titular():
     return render_template_string(FORMULARIO_TITULAR_HTML, error=error)
 
 
-# ============================================================
-# VALIDACIÓN DE ACCESO (El portero entra aquí desde el buscador)
-# ============================================================
 @app.route('/acceso')
 def acceso_portero():
     token = request.args.get('token')
-    
     if not token:
         return "❌ No se proporcionó token de acceso"
     
-    # AHORA EL SISTEMA ES INTELIGENTE: Busca por Token o por DNI
     token = token.strip()
-    
-    # Verificar si lo que escribieron parece un DNI (solo números) o un Token largo
     if token.isdigit():
-        # Es un DNI. Buscamos la autorización activa con ese DNI
         autorizacion = service.validar_dni(token)
     else:
-        # Es un Token. Limpiamos el enlace si lo pegaron completo
         if "token=" in token:
             token = token.split("token=")[-1].split("&")[0]
         autorizacion = service.validar_token(token)
@@ -679,9 +649,6 @@ def acceso_portero():
     return render_template_string(VALIDACION_QR_HTML, **autorizacion)
 
 
-# ============================================================
-# REGISTRO DE INGRESOS Y EGRESOS
-# ============================================================
 @app.route('/registrar_ingreso', methods=['POST'])
 def registrar_ingreso():
     data = request.get_json()
@@ -699,39 +666,19 @@ def registrar_egreso():
     return jsonify(resultado)
 
 
-# ============================================================
-# DASHBOARD DE ACCESOS
-# ============================================================
 @app.route('/dashboard_acceso')
 def dashboard_acceso():
     historial = service.obtener_historial(limite=100)
-    
     total = len(historial)
     activos = sum(1 for r in historial if r.get('estado') == 'Activa')
     dentro = sum(1 for r in historial if r.get('estado_acceso') == 'Dentro')
-    
-    return render_template_string(DASHBOARD_HTML, 
-                                   total=total, 
-                                   activos=activos, 
-                                   dentro=dentro,
-                                   historial=historial)
+    return render_template_string(DASHBOARD_HTML, total=total, activos=activos, dentro=dentro, historial=historial)
 
 
-# ============================================================
-# INICIO DEL SERVIDOR
-# ============================================================
 if __name__ == '__main__':
     print("=" * 60)
     print("🏠 SISTEMA DE AUTORIZACIÓN DE ACCESO - QR")
     print("=" * 60)
-    print("📌 Servidor iniciado en:")
-    print("   • http://0.0.0.0:10000")
+    print("📌 Servidor iniciado en: http://0.0.0.0:10000")
     print("=" * 60)
-    print("📌 Accesos:")
-    print("   • /titular  → Generar QR")
-    print("   • /portero  → Portal para buscar y validar token")
-    print("   • /acceso?token=xxx  → Validar token directo")
-    print("   • /dashboard_acceso → Estadísticas")
-    print("=" * 60)
-    
     app.run(host='0.0.0.0', port=10000, debug=False)
