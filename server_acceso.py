@@ -114,9 +114,8 @@ RESULTADO_QR_HTML = """
         body { font-family: Arial; background: #f0f2f5; padding: 20px; }
         .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 10px; text-align: center; }
         .qr-img { border: 2px solid #ddd; border-radius: 10px; padding: 20px; margin: 20px auto; display: inline-block; }
-        .btn { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; margin: 5px; font-size: 15px; font-weight: bold; color: white; width: 100%; }
-        .btn-wa-visitante { background: #25D366; }
-        .btn-wa-portero { background: #FFA500; }
+        .btn { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; margin: 5px; font-size: 15px; font-weight: bold; color: white; width: 100%; box-sizing: border-box; }
+        .btn-wa { background: #25D366; }
         .btn-blue { background: #3498db; }
         .btn-volver { background: #27ae60; }
         .info { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
@@ -140,11 +139,11 @@ RESULTADO_QR_HTML = """
         </div>
         
         <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px;">
-            <h3 style="color: #555; font-size: 16px; margin-bottom: 15px;">📲 Envío Automático</h3>
+            <h3 style="color: #555; font-size: 16px; margin-bottom: 15px;">📲 Notificaciones Inteligentes</h3>
             
             <div class="action-buttons">
-                <button class="btn btn-wa-visitante" onclick="enviarVisitante()">📲 Enviar al Visitante</button>
-                <button class="btn btn-wa-portero" onclick="enviarPortero()">🚨 Enviar al Portero</button>
+                <!-- ÚNICO BOTÓN: Envía al Visitante y al Portero al mismo tiempo -->
+                <button class="btn btn-wa" onclick="enviarNotificaciones()">📲 Enviar Notificaciones</button>
             </div>
         </div>
         
@@ -159,26 +158,31 @@ RESULTADO_QR_HTML = """
         const nombre = "{{ visitante_nombre }}";
         const dni = "{{ visitante_dni }}";
         
-        // Teléfonos pasados directamente por el backend
         const telVisitante = "{{ telefono_visitante }}";
         const telPortero = "{{ telefono_portero }}";
         
-        function enviarVisitante() {
-            if(!telVisitante) {
-                alert("⚠️ No cargaste el teléfono del visitante en el formulario.");
-                return;
+        function enviarNotificaciones() {
+            // 1. Abrir WhatsApp al Visitante
+            if (telVisitante) {
+                const msgVisitante = `Hola ${nombre}! Aquí tienes tu enlace de acceso al condominio. Por favor, preséntaselo al portero cuando llegues: ${enlaceCompleto}`;
+                const urlVisitante = `https://wa.me/${telVisitante}?text=${encodeURIComponent(msgVisitante)}`;
+                window.open(urlVisitante, '_blank');
+            } else {
+                alert("⚠️ No cargaste el teléfono del visitante.");
             }
-            const mensaje = `Hola ${nombre}! Aquí tienes tu enlace de acceso al condominio. Por favor, preséntaselo al portero cuando llegues: ${enlaceCompleto}`;
-            window.open(`https://wa.me/${telVisitante}?text=${encodeURIComponent(mensaje)}`, '_blank');
-        }
-        
-        function enviarPortero() {
-            if(!telPortero) {
-                alert("⚠️ No cargaste el teléfono del portero en el formulario.");
-                return;
+
+            // 2. Abrir WhatsApp al Portero (en una pestaña separada)
+            if (telPortero) {
+                const msgPortero = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Ingrese el token en el sistema.`;
+                const urlPortero = `https://wa.me/${telPortero}?text=${encodeURIComponent(msgPortero)}`;
+                
+                // Pequeño retraso para no saturar el navegador al abrir dos pestañas
+                setTimeout(() => {
+                    window.open(urlPortero, '_blank');
+                }, 500);
+            } else {
+                alert("⚠️ No cargaste el teléfono del portero.");
             }
-            const mensaje = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Abre el enlace del sistema en tu celular, busca al visitante por DNI y registra el ingreso.`;
-            window.open(`https://wa.me/${telPortero}?text=${encodeURIComponent(mensaje)}`, '_blank');
         }
     </script>
 </body>
@@ -581,7 +585,7 @@ def portal_portero():
 
 
 # ============================================================
-# PORTAL DEL TITULAR (Generar QR) - CORREGIDO (CON ENVÍO DE TELÉFONOS)
+# PORTAL DEL TITULAR (Generar QR)
 # ============================================================
 @app.route('/titular', methods=['GET', 'POST'])
 def portal_titular():
@@ -627,10 +631,16 @@ def portal_titular():
             try:
                 resultado = service.crear_autorizacion(data, usuario)
                 
-                # CORRECCIÓN: Pasamos los teléfonos a la pantalla de éxito
+                # CORRECCIÓN FINAL: Pasamos absolutamente todos los datos
                 return render_template_string(
                     RESULTADO_QR_HTML, 
                     **resultado,
+                    visitante_nombre=request.form.get('visitante_nombre', ''),
+                    visitante_dni=request.form.get('visitante_dni', ''),
+                    fecha_ingreso_autorizada=request.form.get('fecha_ingreso', ''),
+                    hora_ingreso_autorizada=request.form.get('hora_ingreso', ''),
+                    fecha_egreso_autorizada=request.form.get('fecha_egreso', ''),
+                    hora_egreso_autorizada=request.form.get('hora_egreso', ''),
                     telefono_visitante=request.form.get('telefono_visitante', ''),
                     telefono_portero=request.form.get('telefono_portero', '')
                 )
