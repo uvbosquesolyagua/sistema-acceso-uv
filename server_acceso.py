@@ -173,10 +173,9 @@ RESULTADO_QR_HTML = """
 
             // 2. Abrir WhatsApp al Portero (en una pestaña separada)
             if (telPortero) {
-                const msgPortero = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Ingrese el token en el sistema.`;
+                const msgPortero = `🚨 NUEVO ACCESO PARA VALIDAR\\n\\n👤 Visitante: ${nombre}\\n📄 DNI: ${dni}\\n🔑 Token: ${token}\\n\\n👉 Ingrese el DNI en el sistema.`;
                 const urlPortero = `https://wa.me/${telPortero}?text=${encodeURIComponent(msgPortero)}`;
                 
-                // Pequeño retraso para no saturar el navegador al abrir dos pestañas
                 setTimeout(() => {
                     window.open(urlPortero, '_blank');
                 }, 500);
@@ -536,7 +535,7 @@ def index():
 
 
 # ============================================================
-# PORTAL DEL PORTERO - NUEVA PÁGINA CON BUSCADOR
+# PORTAL DEL PORTERO - BUSCADOR INTELIGENTE (Entrada y Salida por DNI)
 # ============================================================
 @app.route('/portero')
 def portal_portero():
@@ -553,7 +552,7 @@ def portal_portero():
             p { color: #555; margin-bottom: 20px; }
             .input-group { display: flex; flex-direction: column; gap: 15px; }
             textarea { 
-                padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; resize: none; height: 100px;
+                padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; resize: none; height: 80px;
                 font-family: monospace;
             }
             textarea:focus { border-color: #2196F3; outline: none; }
@@ -563,18 +562,20 @@ def portal_portero():
             .btn-volver { background: #6c757d; margin-top: 15px; }
             .btn-volver:hover { background: #5a6268; }
             .instruccion { font-size: 13px; color: #6c757d; margin: 10px 0; text-align: left; }
+            .badge { display: inline-block; background: #e74c3c; color: white; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-bottom: 15px; }
         </style>
     </head>
     <body>
         <div class="container">
+            <div class="badge">🛡️ Herramienta del Portero</div>
             <h1>🛡️ Portal del Portero</h1>
-            <p>Escriba aquí el TOKEN o el ENLACE que el visitante le dicta en voz alta.</p>
+            <p>Para registrar una <strong>ENTRADA</strong> o una <strong>SALIDA</strong>, escriba el DNI del visitante.</p>
             
-            <div class="instruccion">💡 El visitante debe leerle el enlace que tiene en su celular.</div>
+            <div class="instruccion">💡 Pregunte al visitante su DNI y escríbalo aquí.</div>
             
             <form action="/acceso" method="GET" class="input-group">
-                <textarea name="token" placeholder="Ej: xxxxxx   o   https://sistema-acceso-uv-1.onrender.com/acceso?token=xxxxxx" required></textarea>
-                <button type="submit" class="btn btn-validar">🔍 Validar Acceso</button>
+                <textarea name="token" placeholder="Ej: 5555" required></textarea>
+                <button type="submit" class="btn btn-validar">🔍 Buscar y Gestionar Acceso</button>
             </form>
             
             <a href="/" class="btn btn-volver">🏠 Volver al inicio</a>
@@ -598,7 +599,7 @@ def portal_titular():
             'id_titular': request.form.get('id_titular'),
             'visitante_nombre': request.form.get('visitante_nombre'),
             'visitante_dni': request.form.get('visitante_dni'),
-            'visitante_telefono': request.form.get('telefono_visitante'), # Guardamos el teléfono del visitante
+            'visitante_telefono': request.form.get('telefono_visitante'), 
             'visitante_vehiculo': request.form.get('visitante_vehiculo'),
             'fecha_ingreso': request.form.get('fecha_ingreso'),
             'hora_ingreso': request.form.get('hora_ingreso'),
@@ -631,7 +632,6 @@ def portal_titular():
             try:
                 resultado = service.crear_autorizacion(data, usuario)
                 
-                # CORRECCIÓN FINAL: Pasamos absolutamente todos los datos
                 return render_template_string(
                     RESULTADO_QR_HTML, 
                     **resultado,
@@ -651,7 +651,7 @@ def portal_titular():
 
 
 # ============================================================
-# VALIDACIÓN DE ACCESO
+# VALIDACIÓN DE ACCESO (El portero entra aquí desde el buscador)
 # ============================================================
 @app.route('/acceso')
 def acceso_portero():
@@ -660,10 +660,18 @@ def acceso_portero():
     if not token:
         return "❌ No se proporcionó token de acceso"
     
-    if "token=" in token:
-        token = token.split("token=")[-1].split("&")[0]
+    # AHORA EL SISTEMA ES INTELIGENTE: Busca por Token o por DNI
+    token = token.strip()
     
-    autorizacion = service.validar_token(token)
+    # Verificar si lo que escribieron parece un DNI (solo números) o un Token largo
+    if token.isdigit():
+        # Es un DNI. Buscamos la autorización activa con ese DNI
+        autorizacion = service.validar_dni(token)
+    else:
+        # Es un Token. Limpiamos el enlace si lo pegaron completo
+        if "token=" in token:
+            token = token.split("token=")[-1].split("&")[0]
+        autorizacion = service.validar_token(token)
     
     if not autorizacion:
         return render_template_string(ERROR_TOKEN_HTML, mensaje="❌ Token inválido o autorización revocada")
