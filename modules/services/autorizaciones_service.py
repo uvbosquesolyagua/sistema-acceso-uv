@@ -147,6 +147,59 @@ class AutorizacionesService:
         except Exception as e:
             print(f"Error al validar token: {e}")
             return None
+
+    # NUEVO MÉTODO: VALIDAR POR DNI (Para el buscador del portero)
+    def validar_dni(self, dni):
+        try:
+            conn = get_connection()
+            conn.row_factory = sqlite3.Row
+            
+            autorizacion = conn.execute("""
+                SELECT 
+                    a.*,
+                    t.apellido_nombre as titular_nombre,
+                    t.id_cta as codigo_cta
+                FROM autorizaciones_acceso a
+                LEFT JOIN titulares t ON a.id_titular = t.id
+                WHERE a.visitante_dni = ? AND a.estado = 'Activa'
+                ORDER BY a.fecha_creacion DESC LIMIT 1
+            """, (dni,)).fetchone()
+            
+            conn.close()
+            
+            if not autorizacion:
+                return None
+            
+            autorizacion = dict(autorizacion)
+            
+            # Usamos la misma lógica de validación de tiempo que en validar_token
+            ahora = datetime.now(timezone.utc)
+            
+            fecha_ingreso = datetime.strptime(
+                f"{autorizacion['fecha_ingreso_autorizada']} {autorizacion['hora_ingreso_autorizada']}",
+                "%Y-%m-%d %H:%M"
+            ).replace(tzinfo=timezone.utc)
+            
+            fecha_egreso = datetime.strptime(
+                f"{autorizacion['fecha_egreso_autorizada']} {autorizacion['hora_egreso_autorizada']}",
+                "%Y-%m-%d %H:%M"
+            ).replace(tzinfo=timezone.utc)
+            
+            if ahora < fecha_ingreso:
+                autorizacion['estado_verificacion'] = 'Pendiente'
+                autorizacion['mensaje'] = '⏳ La autorización aún no está vigente'
+            elif ahora > fecha_egreso:
+                autorizacion['estado_verificacion'] = 'Vencida'
+                autorizacion['mensaje'] = '⚠️ La autorización ha vencido'
+            else:
+                autorizacion['estado_verificacion'] = 'Valida'
+                autorizacion['mensaje'] = '✅ Autorización válida'
+            
+            return autorizacion
+            
+        except Exception as e:
+            print(f"Error al validar DNI: {e}")
+            return None
     
     def registrar_ingreso(self, id_autorizacion, portero):
         fecha_actual = datetime.now()
