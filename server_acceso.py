@@ -254,7 +254,7 @@ FORMULARIO_TITULAR_HTML = """
 """
 
 # ============================================================
-# VALIDACION_QR_HTML CON DNI CORREGIDO
+# VALIDACION_QR_HTML CON EGRESO CORREGIDO
 # ============================================================
 VALIDACION_QR_HTML = """
 <!DOCTYPE html>
@@ -281,7 +281,6 @@ VALIDACION_QR_HTML = """
 </head>
 <body>
     <div class="container">
-        <!-- El título y el estado cambiarán en cuanto cargue el script -->
         <h1 id="statusTitle" style="color: #f39c12;">⏳ Cargando...</h1>
         
         <div class="info">
@@ -293,7 +292,6 @@ VALIDACION_QR_HTML = """
             <p><strong>📊 Estado:</strong> <span id="statusMessage" style="font-weight: bold; color: #f39c12;">⏳ Validando horario...</span></p>
         </div>
         
-        <!-- Aquí el script pondrá los botones de Ingreso, Egreso o Denegado -->
         <div class="action-zone" id="actionZone">
             <button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>
         </div>
@@ -304,15 +302,11 @@ VALIDACION_QR_HTML = """
     </div>
     
     <script>
-        // ============================================================
-        // Lógica de fechas ejecutada 100% en el celular del portero
-        // ============================================================
         const fechaIngresoStr = "{{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }}";
         const fechaEgresoStr = "{{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}";
         const idAutorizacion = {{ id }};
-        const dniCorrecto = "{{ visitante_dni }}".trim(); // <-- CORREGIDO con .trim() y comillas
+        const dniCorrecto = "{{ visitante_dni }}".trim();
 
-        // Convertir a fecha local del celular
         const fechaIngreso = new Date(fechaIngresoStr.replace(' ', 'T'));
         const fechaEgreso = new Date(fechaEgresoStr.replace(' ', 'T'));
         const ahora = new Date();
@@ -321,22 +315,17 @@ VALIDACION_QR_HTML = """
         const statusMessage = document.getElementById('statusMessage');
         const actionZone = document.getElementById('actionZone');
 
-        let estado = '';
-
         if (ahora < fechaIngreso) {
-            estado = 'Pendiente';
             statusTitle.innerHTML = '⏳ Autorización Pendiente';
             statusTitle.style.color = '#f39c12';
             statusMessage.innerHTML = '<span style="color: #f39c12;">⏳ La autorización aún no está vigente.</span>';
             actionZone.innerHTML = `<button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>`;
         } else if (ahora > fechaEgreso) {
-            estado = 'Vencida';
             statusTitle.innerHTML = '❌ Autorización Vencida';
             statusTitle.style.color = '#e74c3c';
             statusMessage.innerHTML = '<span style="color: #e74c3c;">⚠️ La autorización ha vencido.</span>';
             actionZone.innerHTML = `<button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>`;
         } else {
-            estado = 'Valida';
             statusTitle.innerHTML = '✅ Acceso Autorizado';
             statusTitle.style.color = '#27ae60';
             statusMessage.innerHTML = '<span style="color: #27ae60;">✅ Autorización válida en este momento.</span>';
@@ -352,9 +341,8 @@ VALIDACION_QR_HTML = """
             `;
         }
 
-        // Lógica para Ingreso
         function verificarYRegistrar(id, dniCorrecto) {
-            const dniIngresado = document.getElementById('dniInput').value.trim(); // <-- CORREGIDO con .trim()
+            const dniIngresado = document.getElementById('dniInput').value.trim();
             const mensajeDiv = document.getElementById('resultMessage');
             if (dniIngresado === '') {
                 mensajeDiv.innerHTML = '<span style="color: #f39c12;">⚠️ Por favor, ingrese el DNI.</span>';
@@ -386,11 +374,7 @@ VALIDACION_QR_HTML = """
             });
         }
 
-        // ============================================================
-        // Lógica para Egreso (Se activa al recargar la página si ya entró)
-        // ============================================================
         {% if estado_acceso_fisico == 'Dentro' %}
-            // Forzamos a que el botón cambie a Egreso si el servidor dice que ya está dentro
             actionZone.innerHTML = `
                 <h2 style="color: #e74c3c;">🚪 Visitante en el predio</h2>
                 <p>El visitante ya se encuentra dentro. ¿Desea registrar su salida?</p>
@@ -399,25 +383,31 @@ VALIDACION_QR_HTML = """
             `;
         {% endif %}
 
+        // ============================================================
+        // LÓGICA DE EGRESO CORREGIDA (USA LA RUTA CORRECTA DEL SERVIDOR)
+        // ============================================================
         function registrarEgresoDirecto(id) {
             if (!confirm("¿Está seguro de que el visitante se retira del predio?")) return;
             const mensajeDiv = document.getElementById('resultEgreso');
             mensajeDiv.innerHTML = '<span style="color: #f39c12;">⏳ Procesando egreso...</span>';
-            fetch('/registrar_ingreso', {
+            
+            // PASO 1: Pedirle al servidor el ID del registro de ingreso activo
+            fetch('/obtener_ingreso_activo', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ id_autorizacion: id, portero: 'Portero' })
+                body: JSON.stringify({ id_autorizacion: id })
             })
             .then(response => response.json())
             .then(data => {
-                if (!data.success && data.id_registro) {
+                if (data.success && data.id_registro) {
+                    // PASO 2: Usar ese ID para registrar el egreso
                     return fetch('/registrar_egreso', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ id_registro: data.id_registro, portero: 'Portero' })
                     });
                 } else {
-                    throw new Error("No se encontró un ingreso activo.");
+                    throw new Error(data.mensaje || "No se encontró un ingreso activo.");
                 }
             })
             .then(response => response.json())
@@ -683,6 +673,27 @@ def registrar_egreso():
     resultado = service.registrar_egreso(id_registro, portero)
     return jsonify(resultado)
 
+# ============================================================
+# NUEVA RUTA PARA OBTENER EL INGRESO ACTIVO (CORREGIDO PARA EGRESO)
+# ============================================================
+@app.route('/obtener_ingreso_activo', methods=['POST'])
+def obtener_ingreso_activo():
+    data = request.get_json()
+    id_autorizacion = data.get('id_autorizacion')
+    
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    registro = conn.execute("""
+        SELECT id FROM registros_acceso
+        WHERE id_autorizacion = ? AND fecha_egreso IS NULL
+    """, (id_autorizacion,)).fetchone()
+    conn.close()
+    
+    if registro:
+        return jsonify({'success': True, 'id_registro': registro['id']})
+    else:
+        return jsonify({'success': False, 'mensaje': 'No se encontró un ingreso activo.'})
+# ============================================================
 
 @app.route('/dashboard_acceso')
 def dashboard_acceso():
