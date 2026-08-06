@@ -1,5 +1,5 @@
 # modules/services/autorizaciones_service.py
-# Servicio de Autorización de Acceso con QR (Versión Base64 sin disco)
+# Servicio de Autorización de Acceso con QR
 
 import sqlite3
 import secrets
@@ -109,15 +109,14 @@ class AutorizacionesService:
                 WHERE a.token = ? AND a.estado = 'Activa'
             """, (token,)).fetchone()
             
-            conn.close()
-            
             if not autorizacion:
+                conn.close()
                 return None
             
             autorizacion = dict(autorizacion)
             
             # ============================================================
-            # CORRECCIÓN FINAL DE ZONA HORARIA (UTC)
+            # VALIDACIÓN DE TIEMPO Y ESTADO DE ACCESO (Lógica del botón)
             # ============================================================
             ahora = datetime.now(timezone.utc)
             
@@ -131,6 +130,14 @@ class AutorizacionesService:
                 "%Y-%m-%d %H:%M"
             ).replace(tzinfo=timezone.utc)
             
+            # Verificar si ya tiene un registro de ingreso activo (sin egreso)
+            registro_activo = conn.execute("""
+                SELECT id FROM registros_acceso
+                WHERE id_autorizacion = ? AND fecha_egreso IS NULL
+            """, (autorizacion['id'],)).fetchone()
+            
+            conn.close()
+            
             if ahora < fecha_ingreso:
                 autorizacion['estado_verificacion'] = 'Pendiente'
                 autorizacion['mensaje'] = '⏳ La autorización aún no está vigente'
@@ -140,6 +147,12 @@ class AutorizacionesService:
             else:
                 autorizacion['estado_verificacion'] = 'Valida'
                 autorizacion['mensaje'] = '✅ Autorización válida'
+            
+            # AGREGAMOS EL ESTADO DE "DENTRO" (Para saber si mostrar Ingreso o Egreso)
+            if registro_activo:
+                autorizacion['estado_acceso_fisico'] = 'Dentro'
+            else:
+                autorizacion['estado_acceso_fisico'] = 'Fuera'
             # ============================================================
             
             return autorizacion
@@ -148,7 +161,6 @@ class AutorizacionesService:
             print(f"Error al validar token: {e}")
             return None
 
-    # NUEVO MÉTODO: VALIDAR POR DNI (Para el buscador del portero)
     def validar_dni(self, dni):
         try:
             conn = get_connection()
@@ -165,14 +177,15 @@ class AutorizacionesService:
                 ORDER BY a.fecha_creacion DESC LIMIT 1
             """, (dni,)).fetchone()
             
-            conn.close()
-            
             if not autorizacion:
+                conn.close()
                 return None
             
             autorizacion = dict(autorizacion)
             
-            # Usamos la misma lógica de validación de tiempo que en validar_token
+            # ============================================================
+            # VALIDACIÓN DE TIEMPO Y ESTADO DE ACCESO (Lógica del botón)
+            # ============================================================
             ahora = datetime.now(timezone.utc)
             
             fecha_ingreso = datetime.strptime(
@@ -185,6 +198,14 @@ class AutorizacionesService:
                 "%Y-%m-%d %H:%M"
             ).replace(tzinfo=timezone.utc)
             
+            # Verificar si ya tiene un registro de ingreso activo (sin egreso)
+            registro_activo = conn.execute("""
+                SELECT id FROM registros_acceso
+                WHERE id_autorizacion = ? AND fecha_egreso IS NULL
+            """, (autorizacion['id'],)).fetchone()
+            
+            conn.close()
+            
             if ahora < fecha_ingreso:
                 autorizacion['estado_verificacion'] = 'Pendiente'
                 autorizacion['mensaje'] = '⏳ La autorización aún no está vigente'
@@ -194,6 +215,13 @@ class AutorizacionesService:
             else:
                 autorizacion['estado_verificacion'] = 'Valida'
                 autorizacion['mensaje'] = '✅ Autorización válida'
+            
+            # AGREGAMOS EL ESTADO DE "DENTRO" (Para saber si mostrar Ingreso o Egreso)
+            if registro_activo:
+                autorizacion['estado_acceso_fisico'] = 'Dentro'
+            else:
+                autorizacion['estado_acceso_fisico'] = 'Fuera'
+            # ============================================================
             
             return autorizacion
             
