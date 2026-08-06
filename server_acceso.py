@@ -254,7 +254,7 @@ FORMULARIO_TITULAR_HTML = """
 """
 
 # ============================================================
-# VALIDACION_QR_HTML (¡CÁLCULO DE FECHAS EN EL CELULAR!)
+# VALIDACION_QR_HTML CON LÓGICA 100% EN EL CELULAR
 # ============================================================
 VALIDACION_QR_HTML = """
 <!DOCTYPE html>
@@ -281,7 +281,7 @@ VALIDACION_QR_HTML = """
 </head>
 <body>
     <div class="container">
-        <!-- El título cambia según lo que calcule el celular -->
+        <!-- El título y el estado cambiarán en cuanto cargue el script -->
         <h1 id="statusTitle" style="color: #f39c12;">⏳ Cargando...</h1>
         
         <div class="info">
@@ -293,7 +293,7 @@ VALIDACION_QR_HTML = """
             <p><strong>📊 Estado:</strong> <span id="statusMessage" style="font-weight: bold; color: #f39c12;">⏳ Validando horario...</span></p>
         </div>
         
-        <!-- ZONA DE ACCIÓN (INGRESO O EGRESO SEGÚN CORRESPONDA) -->
+        <!-- Aquí el script pondrá los botones de Ingreso, Egreso o Denegado -->
         <div class="action-zone" id="actionZone">
             <button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>
         </div>
@@ -320,7 +320,6 @@ VALIDACION_QR_HTML = """
         const statusTitle = document.getElementById('statusTitle');
         const statusMessage = document.getElementById('statusMessage');
         const actionZone = document.getElementById('actionZone');
-        const vigenciaTexto = document.getElementById('vigenciaTexto');
 
         let estado = '';
 
@@ -387,8 +386,9 @@ VALIDACION_QR_HTML = """
             });
         }
 
-        // Lógica para Egreso (Se activa al recargar la página si el usuario ya entró)
-        // Esto será llamado por el servidor si envía "estado_acceso_fisico = 'Dentro'"
+        // ============================================================
+        // Lógica para Egreso (Se activa al recargar la página si ya entró)
+        // ============================================================
         {% if estado_acceso_fisico == 'Dentro' %}
             // Forzamos a que el botón cambie a Egreso si el servidor dice que ya está dentro
             actionZone.innerHTML = `
@@ -664,7 +664,6 @@ def acceso_portero():
     if not autorizacion:
         return render_template_string(ERROR_TOKEN_HTML, mensaje="❌ Token inválido o autorización revocada")
     
-    # AHORA EL SERVIDOR SOLO PASA LOS DATOS. EL CELULAR DECIDE EL TIEMPO.
     return render_template_string(VALIDACION_QR_HTML, **autorizacion)
 
 
