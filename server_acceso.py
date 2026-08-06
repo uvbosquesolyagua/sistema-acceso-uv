@@ -254,7 +254,7 @@ FORMULARIO_TITULAR_HTML = """
 """
 
 # ============================================================
-# VALIDACION_QR_HTML CON LÓGICA DIRECTA DEL SERVIDOR
+# VALIDACION_QR_HTML (¡CÁLCULO DE FECHAS EN EL CELULAR!)
 # ============================================================
 VALIDACION_QR_HTML = """
 <!DOCTYPE html>
@@ -281,49 +281,21 @@ VALIDACION_QR_HTML = """
 </head>
 <body>
     <div class="container">
-        <h1 style="color: {% if estado_verificacion == 'Valida' %}#27ae60{% elif estado_verificacion == 'Pendiente' %}#f39c12{% else %}#e74c3c{% endif %};">
-            {% if estado_verificacion == 'Valida' %}✅ Acceso Autorizado
-            {% elif estado_verificacion == 'Pendiente' %}⏳ Autorización Pendiente
-            {% else %}❌ Autorización Vencida{% endif %}
-        </h1>
+        <!-- El título cambia según lo que calcule el celular -->
+        <h1 id="statusTitle" style="color: #f39c12;">⏳ Cargando...</h1>
         
         <div class="info">
             <p><strong>👤 Visitante:</strong> {{ visitante_nombre }}</p>
             <p><strong>📄 DNI Registrado:</strong> {{ visitante_dni }}</p>
             <p><strong>🏠 Propiedad:</strong> CTA-{{ codigo_cta }} - {{ titular_nombre }}</p>
-            <p><strong>📅 Vigencia:</strong> {{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }} - {{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}</p>
+            <p><strong>📅 Vigencia:</strong> <span id="vigenciaTexto">{{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }} - {{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}</span></p>
             <p><strong>📌 Motivo:</strong> {{ motivo or 'No especificado' }}</p>
-            <p><strong>📊 Estado:</strong> <span style="font-weight: bold; color: {% if estado_verificacion == 'Valida' %}#27ae60{% elif estado_verificacion == 'Pendiente' %}#f39c12{% else %}#e74c3c{% endif %};">
-                {{ mensaje }}
-            </span></p>
+            <p><strong>📊 Estado:</strong> <span id="statusMessage" style="font-weight: bold; color: #f39c12;">⏳ Validando horario...</span></p>
         </div>
         
         <!-- ZONA DE ACCIÓN (INGRESO O EGRESO SEGÚN CORRESPONDA) -->
-        <div class="action-zone">
-            {% if estado_verificacion == 'Valida' %}
-                
-                {% if estado_acceso_fisico == 'Dentro' %}
-                    <!-- EL VISITANTE YA ESTÁ DENTRO: MOSTRAMOS EGRESO -->
-                    <h2 style="color: #e74c3c;">🚪 Visitante en el predio</h2>
-                    <p>El visitante ya se encuentra dentro. ¿Desea registrar su salida?</p>
-                    <button class="btn btn-red" onclick="registrarEgresoDirecto({{ id }})">🚪 Registrar Egreso</button>
-                    <div id="resultEgreso" style="margin-top: 10px; font-weight: bold;"></div>
-                
-                {% else %}
-                    <!-- EL VISITANTE NO HA ENTRADO: MOSTRAMOS VERIFICACIÓN DE INGRESO -->
-                    <p style="font-weight: bold; color: #555;">🔒 Verificación de Seguridad (Ingreso)</p>
-                    <p>Pregunte al visitante su número de DNI para confirmar su identidad.</p>
-                    <div class="input-group">
-                        <input type="text" id="dniInput" placeholder="Ingrese DNI" autocomplete="off">
-                        <br>
-                        <button class="btn btn-green" id="btnVerify" onclick="verificarYRegistrar({{ id }}, '{{ visitante_dni }}')">🔍 Verificar y Registrar Ingreso</button>
-                    </div>
-                    <div id="resultMessage" style="margin-top: 10px; font-weight: bold;"></div>
-                {% endif %}
-
-            {% else %}
-                <button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>
-            {% endif %}
+        <div class="action-zone" id="actionZone">
+            <button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>
         </div>
 
         <br><br>
@@ -332,6 +304,55 @@ VALIDACION_QR_HTML = """
     </div>
     
     <script>
+        // ============================================================
+        // Lógica de fechas ejecutada 100% en el celular del portero
+        // ============================================================
+        const fechaIngresoStr = "{{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }}";
+        const fechaEgresoStr = "{{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}";
+        const idAutorizacion = {{ id }};
+        const dniCorrecto = "{{ visitante_dni }}";
+
+        // Convertir a fecha local del celular
+        const fechaIngreso = new Date(fechaIngresoStr.replace(' ', 'T'));
+        const fechaEgreso = new Date(fechaEgresoStr.replace(' ', 'T'));
+        const ahora = new Date();
+
+        const statusTitle = document.getElementById('statusTitle');
+        const statusMessage = document.getElementById('statusMessage');
+        const actionZone = document.getElementById('actionZone');
+        const vigenciaTexto = document.getElementById('vigenciaTexto');
+
+        let estado = '';
+
+        if (ahora < fechaIngreso) {
+            estado = 'Pendiente';
+            statusTitle.innerHTML = '⏳ Autorización Pendiente';
+            statusTitle.style.color = '#f39c12';
+            statusMessage.innerHTML = '<span style="color: #f39c12;">⏳ La autorización aún no está vigente.</span>';
+            actionZone.innerHTML = `<button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>`;
+        } else if (ahora > fechaEgreso) {
+            estado = 'Vencida';
+            statusTitle.innerHTML = '❌ Autorización Vencida';
+            statusTitle.style.color = '#e74c3c';
+            statusMessage.innerHTML = '<span style="color: #e74c3c;">⚠️ La autorización ha vencido.</span>';
+            actionZone.innerHTML = `<button class="btn" style="background: #95a5a6; width: 100%;" disabled>⛔ Acceso Denegado</button>`;
+        } else {
+            estado = 'Valida';
+            statusTitle.innerHTML = '✅ Acceso Autorizado';
+            statusTitle.style.color = '#27ae60';
+            statusMessage.innerHTML = '<span style="color: #27ae60;">✅ Autorización válida en este momento.</span>';
+            actionZone.innerHTML = `
+                <p style="font-weight: bold; color: #555;">🔒 Verificación de Seguridad (Ingreso)</p>
+                <p>Pregunte al visitante su número de DNI para confirmar su identidad.</p>
+                <div class="input-group">
+                    <input type="text" id="dniInput" placeholder="Ingrese DNI" autocomplete="off">
+                    <br>
+                    <button class="btn btn-green" id="btnVerify" onclick="verificarYRegistrar(${idAutorizacion}, '${dniCorrecto}')">🔍 Verificar y Registrar Ingreso</button>
+                </div>
+                <div id="resultMessage" style="margin-top: 10px; font-weight: bold;"></div>
+            `;
+        }
+
         // Lógica para Ingreso
         function verificarYRegistrar(id, dniCorrecto) {
             const dniIngresado = document.getElementById('dniInput').value.trim();
@@ -366,7 +387,18 @@ VALIDACION_QR_HTML = """
             });
         }
 
-        // Lógica para Egreso
+        // Lógica para Egreso (Se activa al recargar la página si el usuario ya entró)
+        // Esto será llamado por el servidor si envía "estado_acceso_fisico = 'Dentro'"
+        {% if estado_acceso_fisico == 'Dentro' %}
+            // Forzamos a que el botón cambie a Egreso si el servidor dice que ya está dentro
+            actionZone.innerHTML = `
+                <h2 style="color: #e74c3c;">🚪 Visitante en el predio</h2>
+                <p>El visitante ya se encuentra dentro. ¿Desea registrar su salida?</p>
+                <button class="btn btn-red" onclick="registrarEgresoDirecto(${idAutorizacion})">🚪 Registrar Egreso</button>
+                <div id="resultEgreso" style="margin-top: 10px; font-weight: bold;"></div>
+            `;
+        {% endif %}
+
         function registrarEgresoDirecto(id) {
             if (!confirm("¿Está seguro de que el visitante se retira del predio?")) return;
             const mensajeDiv = document.getElementById('resultEgreso');
@@ -632,6 +664,7 @@ def acceso_portero():
     if not autorizacion:
         return render_template_string(ERROR_TOKEN_HTML, mensaje="❌ Token inválido o autorización revocada")
     
+    # AHORA EL SERVIDOR SOLO PASA LOS DATOS. EL CELULAR DECIDE EL TIEMPO.
     return render_template_string(VALIDACION_QR_HTML, **autorizacion)
 
 
