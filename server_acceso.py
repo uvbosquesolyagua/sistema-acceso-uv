@@ -254,7 +254,7 @@ FORMULARIO_TITULAR_HTML = """
 """
 
 # ============================================================
-# VALIDACION_QR_HTML CON LÓGICA 100% EN EL CELULAR
+# VALIDACION_QR_HTML CON DNI CORREGIDO
 # ============================================================
 VALIDACION_QR_HTML = """
 <!DOCTYPE html>
@@ -310,7 +310,7 @@ VALIDACION_QR_HTML = """
         const fechaIngresoStr = "{{ fecha_ingreso_autorizada }} {{ hora_ingreso_autorizada }}";
         const fechaEgresoStr = "{{ fecha_egreso_autorizada }} {{ hora_egreso_autorizada }}";
         const idAutorizacion = {{ id }};
-        const dniCorrecto = "{{ visitante_dni }}";
+        const dniCorrecto = "{{ visitante_dni }}".trim(); // <-- CORREGIDO con .trim() y comillas
 
         // Convertir a fecha local del celular
         const fechaIngreso = new Date(fechaIngresoStr.replace(' ', 'T'));
@@ -354,7 +354,7 @@ VALIDACION_QR_HTML = """
 
         // Lógica para Ingreso
         function verificarYRegistrar(id, dniCorrecto) {
-            const dniIngresado = document.getElementById('dniInput').value.trim();
+            const dniIngresado = document.getElementById('dniInput').value.trim(); // <-- CORREGIDO con .trim()
             const mensajeDiv = document.getElementById('resultMessage');
             if (dniIngresado === '') {
                 mensajeDiv.innerHTML = '<span style="color: #f39c12;">⚠️ Por favor, ingrese el DNI.</span>';
